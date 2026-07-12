@@ -95,8 +95,11 @@ off high.
    fill the `CONFIG` object (the only thing you edit) — header (ticker/company/price/as-of),
    `verdict` (label + tone + pass-weighted score /7 + one-line summary + buy point/stop), the
    seven `letters` (each with score, the bar, the actual value, and a CAN-SLIM-only `read`), the
-   `chart` technicals (RS, % off high, base, pivot, breakout volume), the `buyPlan` (pivot,
-   7-8% stop, profit-taking, sell signals to watch), disclaimer and sources.
+   `chart` technicals (RS, % off high, base, pivot, breakout volume), the optional
+   `essentials` reference stats (P/E, forward P/E, market cap, EPS, yield, beta, shares,
+   avg $ volume, next earnings — **reference only, not a CAN SLIM input**; leave empty to
+   hide), the `buyPlan` (pivot, 7-8% stop, profit-taking, sell signals to watch),
+   disclaimer and sources.
 2. **Deliver the HTML dashboard — this is the default deliverable.** The filled
    `<TICKER>-canslim.html` is fully self-contained (no external assets), theme-aware, and dark
    by default. Give the user the file and **open it in the browser** for them (e.g. launch

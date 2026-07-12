@@ -17,6 +17,10 @@
     - Here the scorecard DOES include M (7 rows) because this is a single stock's full
       evaluation - M is shown as the market-context row.
     - Keep CONFIG text ASCII where practical. Never put account-bound data in CONFIG.
+    - `essentials` is an OPTIONAL reference block (P/E, forward P/E, market cap, EPS,
+      yield, beta, etc.). It is NOT part of the CAN SLIM grade - the method explicitly
+      ignores P/E and valuation - so keep it clearly separate and never let it leak into a
+      letter's `read`. Leave the array empty to hide the section entirely.
 -->
 <!doctype html>
 <html lang="en">
@@ -57,6 +61,7 @@
   .verdict .plan{font-family:var(--mono);font-size:13.5px;color:var(--muted);white-space:nowrap}
 
   .section-title{font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:24px 0 10px}
+  .section-note{font-weight:400;text-transform:none;letter-spacing:0;opacity:.72;font-size:11px}
 
   .row{display:grid;grid-template-columns:52px 1fr;gap:14px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:13px 15px;margin-bottom:9px}
   .lbadge{width:44px;height:44px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:22px;font-weight:800;color:#fff}
@@ -111,6 +116,9 @@
   <div class="section-title">Chart position &amp; technicals</div>
   <div class="grid" id="chart"></div>
 
+  <div class="section-title" id="essentials-title">Company essentials <span class="section-note">&mdash; reference only, not a CAN SLIM input (the method ignores P/E &amp; valuation)</span></div>
+  <div class="grid" id="essentials"></div>
+
   <div class="section-title">If you act on it (per the method)</div>
   <div class="callout" id="buyplan"></div>
 
@@ -152,6 +160,22 @@ const CONFIG = {
     // { l:"Base", v:"cup-with-handle" },
     // { l:"Pivot buy point", v:"~178" },
     // { l:"Breakout volume", v:"+82% vs avg", tone:"pos" },
+  ],
+
+  // Company essentials - reference facts only (P/E, market cap, yield, etc).
+  // NOT part of the CAN SLIM grade; the method explicitly ignores P/E & valuation.
+  // Leave this array empty to hide the whole section.
+  essentials: [
+    // { l:"Market cap", v:"$1.2T" },
+    // { l:"P/E (TTM)", v:"36" },
+    // { l:"Forward P/E", v:"29" },
+    // { l:"EPS (TTM)", v:"$5.60" },
+    // { l:"Price / sales", v:"22" },
+    // { l:"Dividend yield", v:"0.03%" },
+    // { l:"Beta", v:"1.7" },
+    // { l:"Shares out", v:"24.4B" },
+    // { l:"Avg $ volume", v:"$33B/day" },
+    // { l:"Next earnings", v:"~Aug 2026" },
   ],
 
   buyPlan: {
@@ -201,6 +225,12 @@ $("letters").innerHTML = (CONFIG.letters||[]).map(L=>{
 
 $("chart").innerHTML = (CONFIG.chart||[]).map(s=>
   '<div class="stat"><div class="l">'+esc(s.l)+'</div><div class="v '+(s.tone||'')+'">'+esc(s.v)+'</div></div>').join('');
+
+const ess = CONFIG.essentials||[];
+if (ess.length){
+  $("essentials").innerHTML = ess.map(s=>
+    '<div class="stat"><div class="l">'+esc(s.l)+'</div><div class="v '+(s.tone||'')+'">'+esc(s.v)+'</div></div>').join('');
+} else { const et=$("essentials-title"); if(et) et.style.display='none'; }
 
 const bp = CONFIG.buyPlan||{};
 $("buyplan").innerHTML = '<div>'+esc(bp.text||"")+'</div>'+
