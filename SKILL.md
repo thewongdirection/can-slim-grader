@@ -3,25 +3,32 @@ name: can-slim-grader
 description: >-
   Evaluate a single specified stock ticker against the CAN SLIM growth-investing model and
   deliver a structured letter-by-letter (C-A-N-S-L-I-M) scorecard with a BUY-RANGE / WATCH /
-  AVOID verdict, rendered as a self-contained HTML report. Use this whenever the user wants to
+  AVOID verdict, rendered as a self-contained PDF report (HTML source kept alongside). Use this whenever the user wants to
   judge the QUALITY of one stock or asks whether a specific ticker is any good — "evaluate
   NVDA", "is TSLA a good stock", "rate AAPL", "does PLTR pass CAN SLIM", "how does AMD score",
   "should I be interested in MSFT", "grade this stock", "assess LLY", "is CRWD a buy", "what do
   you think of ANET", "check the quality of <ticker>", "how strong is <company>". Works for any
   publicly traded ticker; pulls live price/volume from the Interactive Brokers (IBKR) connector
   and fundamentals from connected financial-data sources or the web. This is the single-stock
-  GRADING lens (one ticker in, a CAN SLIM verdict out) — for a ranked LIST of screened ideas
-  use the `can-slim-recommend` skill instead; for a data-rich single-stock dashboard use
-  `ibkr-review-ticker`. Analysis and decision support, never personalized investment advice and
-  never trading.
+  GRADING lens (one ticker in, a CAN SLIM verdict out) and the sister skill of
+  `can-slim-recommend` — for a ranked LIST of screened ideas use `can-slim-recommend` instead;
+  for a data-rich single-stock dashboard use `ibkr-review-ticker`. Analysis and decision
+  support, never personalized investment advice and never trading.
 ---
 
 # can-slim-grader — grade one ticker against CAN SLIM
 
+**Sister skill of [`can-slim-recommend`](https://github.com/thewongdirection/can-slim-recommend).**
+The two are a matched pair on one CAN SLIM methodology: `can-slim-recommend` is the market-wide
+screener that returns a ranked LIST of ideas; **`can-slim-grader` is the single-ticker grading
+lens** — one ticker in, one verdict out. They share `references/canslim-methodology.md` and
+`scripts/relative_strength.py` verbatim.
+
 Takes **one ticker** and grades it, letter by letter, against the seven CAN SLIM criteria,
 then returns a **BUY-RANGE / WATCH / AVOID** verdict with the evidence, a chart-position read,
 and — if it's actionable — the pivot buy point and the 7-8% loss-cutting stop. Output is a
-self-contained HTML scorecard. **Decision support, not advice, and never an order.**
+self-contained **PDF** scorecard by default (the HTML source is kept alongside).
+**Decision support, not advice, and never an order.**
 
 ## What CAN SLIM is (the standard this skill grades against)
 CAN SLIM is a growth-stock selection framework built on how the market actually behaves
@@ -107,9 +114,10 @@ bases/pivots, relative strength, new highs, volume/accumulation, leadership, spo
 direction. No generic macro takes, analyst targets, or "good company" vibes. Always pair the
 verdict with the defensive rule (cut losses 7-8%).
 
-## Companion skills
-- **`can-slim-recommend`** — the market-wide screener (a ranked list of CAN SLIM ideas). Use it
-  when the user wants ideas/a list rather than a verdict on one named stock.
+## Sister & companion skills
+- **`can-slim-recommend` (sister skill)** — the market-wide screener (a ranked list of CAN SLIM
+  ideas) built on the same methodology and RS script. Use it when the user wants ideas/a list
+  rather than a verdict on one named stock; use this grader for the reverse.
 - **`ibkr-review-ticker`** — a data-rich single-stock dashboard (fundamentals vs peers,
   valuation, options, price outlook). Fold its data into the evaluation when useful.
 - **`securities-filings-lookup`** — the official filing PDFs (10-K/10-Q/20-F) behind C/A and

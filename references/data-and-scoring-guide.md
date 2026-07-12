@@ -45,6 +45,10 @@ Same ladder as the screener — prefer real financial data over generic web sear
    those figures are *sequential* quarter-over-quarter, not the YoY same-quarter compare CAN
    SLIM's C requires. (Annual growth via `period="annual"` is fine — annual periods aren't
    seasonal.)
+   **Plan caveat:** on lower FMP tiers `statements` at `period="annual"` (income statement,
+   key metrics) works, but `period="quarter"` is often plan-gated and returns *ACCESS DENIED*.
+   If the quarterly call is blocked, don't stall — source the latest quarter's C from the web
+   or the 10-Q via **`securities-filings-lookup`**, and keep FMP for the annual A/ROE data.
    Requires the user's FMP API key / connector; if absent, skip to the next source.
 5. **SEC EDGAR** via the **`securities-filings-lookup`** skill — authoritative 10-K/10-Q/20-F
    for ground-truth statements, and 13F/Form 4 for **I** (also non-US listings).

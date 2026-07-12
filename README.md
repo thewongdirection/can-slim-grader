@@ -9,9 +9,12 @@ It activates whenever you want to judge the *quality* of one stock — *"evaluat
 TSLA a good stock"*, *"rate AAPL"*, *"does PLTR pass CAN SLIM"*, *"how does AMD score"*, *"is
 CRWD a buy"*, *"grade this stock"*.
 
-It is the single-stock **grading lens** — one ticker in, a CAN SLIM verdict out. For a ranked
-*list* of screened ideas, use the companion [`can-slim-recommend`](https://github.com/thewongdirection/can-slim-recommend)
-skill; for a data-rich single-stock dashboard, use `ibkr-review-ticker`.
+It is the **sister skill of [`can-slim-recommend`](https://github.com/thewongdirection/can-slim-recommend)** —
+the two are a matched pair on one CAN SLIM methodology (they share the same
+`references/canslim-methodology.md` and `scripts/relative_strength.py`). This one is the
+single-stock **grading lens** — one ticker in, a CAN SLIM verdict out; `can-slim-recommend` is
+the market-wide screener that returns a ranked *list* of ideas. For a data-rich single-stock
+dashboard, use `ibkr-review-ticker`.
 
 ## What it does
 
