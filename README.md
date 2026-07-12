@@ -19,7 +19,8 @@ For the ticker you name it:
 2. Pulls the stock's **live price/volume/52-week stats** (IBKR) and computes relative strength,
    % off 52-week high, base shape, and breakout volume.
 3. Gathers **fundamentals** (quarterly & annual earnings, sales, ROE, ownership) from connected
-   financial-data sources (Daloopa / bigdata.com / LSEG / SEC EDGAR) or the web.
+   financial-data sources (Daloopa / bigdata.com / LSEG / Financial Modeling Prep / SEC EDGAR)
+   or the web.
 4. **Grades each of C·A·N·S·L·I·M** pass / partial / fail against the method's thresholds, with
    the concrete numbers behind each grade.
 5. Returns a **verdict** — BUY-RANGE (with pivot buy point + 7–8% stop), WATCH (what needs to

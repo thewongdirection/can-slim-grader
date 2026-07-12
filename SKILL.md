@@ -41,8 +41,9 @@ fundamental source-priority ladder, and the pass/partial/fail rubric per letter.
 ## Prerequisites
 - **IBKR MCP connector** (read-only market data) for live price/volume/52-week stats and the
   stock's group. IBKR tools are deferred — load with `ToolSearch` first.
-- **Fundamental data** via connectors (Daloopa / bigdata.com / LSEG / SEC EDGAR through
-  `securities-filings-lookup`) or **web search**. See the source ladder in the data guide.
+- **Fundamental data** via connectors (Daloopa / bigdata.com / LSEG / **Financial Modeling
+  Prep (FMP)** / SEC EDGAR through `securities-filings-lookup`) or **web search**. See the
+  source ladder in the data guide.
 - If IBKR is unavailable, source price/technicals from the web too and say so — don't block.
 
 ## Workflow
