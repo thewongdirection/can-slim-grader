@@ -1,4 +1,4 @@
-# can-slim-suggest
+# can-slim-grader
 
 A Claude skill that **evaluates a single stock ticker against the CAN SLIM growth-investing
 model** and returns a structured, letter-by-letter scorecard with a **BUY-RANGE / WATCH /

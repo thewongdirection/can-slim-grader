@@ -1,5 +1,5 @@
 ---
-name: can-slim-suggest
+name: can-slim-grader
 description: >-
   Evaluate a single specified stock ticker against the CAN SLIM growth-investing model and
   deliver a structured letter-by-letter (C-A-N-S-L-I-M) scorecard with a BUY-RANGE / WATCH /
@@ -16,7 +16,7 @@ description: >-
   never trading.
 ---
 
-# can-slim-suggest — grade one ticker against CAN SLIM
+# can-slim-grader — grade one ticker against CAN SLIM
 
 Takes **one ticker** and grades it, letter by letter, against the seven CAN SLIM criteria,
 then returns a **BUY-RANGE / WATCH / AVOID** verdict with the evidence, a chart-position read,
