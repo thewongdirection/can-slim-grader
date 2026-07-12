@@ -1,0 +1,210 @@
+<!--
+  can-slim-evaluate - single-ticker CAN SLIM scorecard.
+
+  HOW TO USE (per run):
+    1. Copy this file to an output file, e.g. <TICKER>-canslim.html
+    2. Fill the CONFIG object below with the evaluation. That is the ONLY thing you edit -
+       the page renders itself. Do not hand-edit the DOM.
+    3. Open / present the file. For PDF, print-to-PDF (print CSS is A4/Letter-friendly).
+
+  RULES:
+    - Every letter's `read` must be expressed ONLY in CAN SLIM terms, and cite the concrete
+      number (the EPS/sales %, RS figure, ROE, % off high, base type). No outside rationale.
+    - `score` per letter is exactly "pass" | "partial" | "fail".
+    - verdict.label is "BUY-RANGE" | "WATCH" | "AVOID"; verdict.tone is "up" | "pressure" | "down".
+    - Here the scorecard DOES include M (7 rows) because this is a single stock's full
+      evaluation - M is shown as the market-context row.
+    - Keep CONFIG text ASCII where practical. Never put account-bound data in CONFIG.
+-->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CAN SLIM Evaluation</title>
+<style>
+  :root{
+    --bg:#f7f8fa; --panel:#ffffff; --ink:#1a1d24; --muted:#5b6472; --line:#e4e7ec;
+    --accent:#1c64f2; --accent-soft:#e8f0fe;
+    --pass:#0f9d58; --pass-bg:#e6f4ea; --partial:#c77700; --partial-bg:#fdf1dd;
+    --fail:#c5221f; --fail-bg:#fce8e6; --chip:#eef1f5;
+    --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:'Inter',system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{--bg:#0f1218;--panel:#171b22;--ink:#e6e9ef;--muted:#9aa4b2;--line:#262c36;
+      --accent:#5b8cff;--accent-soft:#1a2436;--chip:#212733;
+      --pass-bg:#123122;--partial-bg:#33280f;--fail-bg:#3a1512;}
+  }
+  :root[data-theme="dark"]{--bg:#0f1218;--panel:#171b22;--ink:#e6e9ef;--muted:#9aa4b2;--line:#262c36;
+      --accent:#5b8cff;--accent-soft:#1a2436;--chip:#212733;--pass-bg:#123122;--partial-bg:#33280f;--fail-bg:#3a1512;}
+  :root[data-theme="light"]{--bg:#f7f8fa;--panel:#ffffff;--ink:#1a1d24;--muted:#5b6472;--line:#e4e7ec;
+      --accent:#1c64f2;--accent-soft:#e8f0fe;--chip:#eef1f5;--pass-bg:#e6f4ea;--partial-bg:#fdf1dd;--fail-bg:#fce8e6;}
+
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.5;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:900px;margin:0 auto;padding:28px 22px 60px}
+  header.top{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:12px;border-bottom:2px solid var(--line);padding-bottom:14px}
+  .tk{font-family:var(--mono);font-size:30px;font-weight:700;letter-spacing:-.01em}
+  .co{color:var(--muted);font-size:14px}
+  .px{font-family:var(--mono);font-size:20px;font-weight:700}
+  .meta{font-family:var(--mono);font-size:12px;color:var(--muted);text-align:right}
+
+  .verdict{display:flex;flex-wrap:wrap;gap:16px;align-items:center;margin:18px 0;border-radius:14px;padding:16px 18px;border:1px solid var(--line)}
+  .verdict.up{background:var(--pass-bg)} .verdict.pressure{background:var(--partial-bg)} .verdict.down{background:var(--fail-bg)}
+  .verdict .badge{font-size:20px;font-weight:800;letter-spacing:.02em;padding:8px 16px;border-radius:10px;background:var(--panel);white-space:nowrap}
+  .verdict.up .badge{color:var(--pass)} .verdict.pressure .badge{color:var(--partial)} .verdict.down .badge{color:var(--fail)}
+  .verdict .score{font-family:var(--mono);font-size:26px;font-weight:800}
+  .verdict .sum{flex:1;min-width:240px;font-size:14px}
+  .verdict .plan{font-family:var(--mono);font-size:12.5px;color:var(--muted);white-space:nowrap}
+
+  .section-title{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:24px 0 10px}
+
+  .row{display:grid;grid-template-columns:52px 1fr;gap:14px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:13px 15px;margin-bottom:9px}
+  .lbadge{width:44px;height:44px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:20px;font-weight:800;color:#fff}
+  .lbadge.pass{background:var(--pass)} .lbadge.partial{background:var(--partial)} .lbadge.fail{background:var(--fail)}
+  .rhead{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+  .rname{font-weight:700;font-size:14.5px}
+  .mk{font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px;text-transform:uppercase;letter-spacing:.04em}
+  .mk.pass{background:var(--pass-bg);color:var(--pass)} .mk.partial{background:var(--partial-bg);color:var(--partial)} .mk.fail{background:var(--fail-bg);color:var(--fail)}
+  .kv{font-size:12px;color:var(--muted);font-family:var(--mono);margin-top:3px}
+  .kv b{color:var(--ink)}
+  .read{font-size:13px;margin-top:6px}
+
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+  .stat .l{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+  .stat .v{font-family:var(--mono);font-size:17px;font-weight:700;margin-top:3px}
+  .stat .v.pos{color:var(--pass)} .stat .v.neg{color:var(--fail)}
+
+  .callout{background:var(--accent-soft);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:8px;padding:12px 15px;font-size:13px;margin:6px 0}
+  .callout ul{margin:6px 0 0;padding-left:18px} .callout li{margin:3px 0}
+  footer{margin-top:26px;padding-top:16px;border-top:1px solid var(--line);color:var(--muted);font-size:11.5px}
+  footer a{color:var(--accent)} .sources a{margin-right:12px;white-space:nowrap}
+
+  @media print{ body{background:#fff} .wrap{max-width:none;padding:0} .row,.verdict,.stat,.callout{break-inside:avoid} a{color:inherit;text-decoration:none} @page{margin:14mm} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <div class="tk" id="tk"></div>
+      <div class="co" id="co"></div>
+    </div>
+    <div style="text-align:right">
+      <div class="px" id="px"></div>
+      <div class="meta" id="meta"></div>
+    </div>
+  </header>
+
+  <div class="verdict" id="verdict"></div>
+
+  <div class="section-title">CAN SLIM scorecard</div>
+  <div id="letters"></div>
+
+  <div class="section-title">Chart position &amp; technicals</div>
+  <div class="grid" id="chart"></div>
+
+  <div class="section-title">If you act on it (per the method)</div>
+  <div class="callout" id="buyplan"></div>
+
+  <footer>
+    <div id="disclaimer"></div>
+    <div class="sources" id="sources" style="margin-top:8px"></div>
+    <div style="margin-top:8px">CAN SLIM: C - current quarterly earnings &amp; sales &middot; A - annual earnings &amp; ROE &middot; N - new products/management/highs off a base &middot; S - supply/demand &amp; volume &middot; L - leader not laggard / relative strength &middot; I - institutional sponsorship &middot; M - market direction. Grades are point-in-time and change with the data and the market.</div>
+  </footer>
+</div>
+
+<script>
+/* ============================ FILL THIS PER RUN ============================ */
+const CONFIG = {
+  ticker: "TICK",
+  company: "Company Name - Sector / Industry group",
+  price: "$0.00",
+  asOf: "YYYY-MM-DD (close)",
+  dataSource: "IBKR + fundamentals",
+
+  verdict: {
+    label: "WATCH",            // "BUY-RANGE" | "WATCH" | "AVOID"
+    tone: "pressure",          // "up" | "pressure" | "down"
+    scoreText: "0 / 7",        // pass-weighted score out of 7
+    summary: "One-line CAN SLIM read of the stock.",
+    plan: "Buy point: - | Stop: -"
+  },
+
+  // Seven rows, in order C A N S L I M. score = pass|partial|fail.
+  letters: [
+    // { key:"C", name:"Current quarterly earnings & sales", score:"pass",
+    //   threshold:"EPS & sales up >=25% YoY, accelerating",
+    //   actual:"EPS +32%, sales +35%",
+    //   read:"Latest quarter EPS +32% / sales +35% and accelerating - clears the bar." },
+  ],
+
+  chart: [
+    // { l:"Relative strength", v:"+51", tone:"pos" },
+    // { l:"% off 52-wk high", v:"0%" },
+    // { l:"Base", v:"cup-with-handle" },
+    // { l:"Pivot buy point", v:"~178" },
+    // { l:"Breakout volume", v:"+82% vs avg", tone:"pos" },
+  ],
+
+  buyPlan: {
+    text: "If the setup is valid: buy at the pivot, size so a 7-8% stop is your max loss.",
+    items: [
+      // "Pivot buy point: ~178; do not chase >5% past it.",
+      // "Cut the loss at 7-8% below your buy (3% in a market correction). No exceptions.",
+      // "Sell signals to watch: climax run / exhaustion gap, RS breaking below 70, close below the 10-week line for weeks, 2 quarters of earnings deceleration."
+    ]
+  },
+
+  disclaimer: "Informational decision support, not investment advice; not a financial advisor. Figures are as-of the timestamp; RS is a relative-strength proxy (vs SPY), not a full-market 1-99 rating; fundamentals may lag. Nothing here is an order.",
+  sources: [ /* { label, url } */ ]
+};
+/* ========================================================================== */
+
+const $ = (id)=>document.getElementById(id);
+const esc = (s)=> (s==null?"":String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const MK = {pass:"&#10003;", partial:"~", fail:"&#10007;"};
+const MKW = {pass:"PASS", partial:"PARTIAL", fail:"FAIL"};
+
+document.title = CONFIG.ticker + " - CAN SLIM Evaluation";
+$("tk").textContent = CONFIG.ticker || "";
+$("co").textContent = CONFIG.company || "";
+$("px").textContent = CONFIG.price || "";
+$("meta").innerHTML = "As of " + esc(CONFIG.asOf||"") + "<br>" + esc(CONFIG.dataSource||"");
+
+const v = CONFIG.verdict||{};
+$("verdict").className = "verdict " + esc(v.tone||"pressure");
+$("verdict").innerHTML =
+  '<span class="badge">'+esc(v.label||"")+'</span>'+
+  '<span class="score">'+esc(v.scoreText||"")+'</span>'+
+  '<span class="sum">'+esc(v.summary||"")+'</span>'+
+  (v.plan?'<span class="plan">'+esc(v.plan)+'</span>':'');
+
+$("letters").innerHTML = (CONFIG.letters||[]).map(L=>{
+  const t = L.score||"fail";
+  return '<div class="row">'+
+    '<div class="lbadge '+t+'">'+esc(L.key)+'</div>'+
+    '<div>'+
+      '<div class="rhead"><span class="rname">'+esc(L.name)+'</span><span class="mk '+t+'">'+MK[t]+' '+MKW[t]+'</span></div>'+
+      (L.threshold||L.actual?'<div class="kv">Bar: '+esc(L.threshold||"-")+' &nbsp;|&nbsp; Actual: <b>'+esc(L.actual||"n/a")+'</b></div>':'')+
+      (L.read?'<div class="read">'+esc(L.read)+'</div>':'')+
+    '</div>'+
+  '</div>';
+}).join('');
+
+$("chart").innerHTML = (CONFIG.chart||[]).map(s=>
+  '<div class="stat"><div class="l">'+esc(s.l)+'</div><div class="v '+(s.tone||'')+'">'+esc(s.v)+'</div></div>').join('');
+
+const bp = CONFIG.buyPlan||{};
+$("buyplan").innerHTML = '<div>'+esc(bp.text||"")+'</div>'+
+  ((bp.items||[]).length?'<ul>'+bp.items.map(i=>'<li>'+esc(i)+'</li>').join('')+'</ul>':'');
+
+$("disclaimer").textContent = CONFIG.disclaimer||'';
+if ((CONFIG.sources||[]).length){
+  $("sources").innerHTML = "Sources: " + CONFIG.sources.map(s=>'<a href="'+esc(s.url)+'">'+esc(s.label)+'</a>').join('');
+}
+</script>
+</body>
+</html>
