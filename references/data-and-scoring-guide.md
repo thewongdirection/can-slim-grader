@@ -39,6 +39,12 @@ Same ladder as the screener — prefer real financial data over generic web sear
    (forward estimates & consensus → forward **A**), `form13F` + `insiderTrades` (institutional
    & management ownership → **I**/**S**), `company` (profile, float, sector), `calendar`
    (next-earnings date → **N**/timing), `secFilings`, `discountedCashFlow`, `earningsTranscript`.
+   **C caveat — compute quarterly growth YoY yourself:** pull `statements` → `income-statement`
+   (`period="quarter"`, `limit≈8-12`) and compare each quarter to the *same quarter one year
+   earlier* (4 rows back). Do **not** read C off `income-statement-growth` at `period="quarter"` —
+   those figures are *sequential* quarter-over-quarter, not the YoY same-quarter compare CAN
+   SLIM's C requires. (Annual growth via `period="annual"` is fine — annual periods aren't
+   seasonal.)
    Requires the user's FMP API key / connector; if absent, skip to the next source.
 5. **SEC EDGAR** via the **`securities-filings-lookup`** skill — authoritative 10-K/10-Q/20-F
    for ground-truth statements, and 13F/Form 4 for **I** (also non-US listings).

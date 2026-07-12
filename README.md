@@ -2,7 +2,8 @@
 
 A Claude skill that **evaluates a single stock ticker against the CAN SLIM growth-investing
 model** and returns a structured, letter-by-letter scorecard with a **BUY-RANGE / WATCH /
-AVOID** verdict — rendered as a self-contained HTML report.
+AVOID** verdict — delivered as a **PDF report by default** (rendered from a self-contained,
+print-tuned HTML template).
 
 It activates whenever you want to judge the *quality* of one stock — *"evaluate NVDA"*, *"is
 TSLA a good stock"*, *"rate AAPL"*, *"does PLTR pass CAN SLIM"*, *"how does AMD score"*, *"is
@@ -46,12 +47,17 @@ For the ticker you name it:
   fundamental source-priority ladder, and the pass/partial/fail scoring rubric + verdict rules.
 - `scripts/relative_strength.py` — computes the RS proxy, % off 52-week high, base
   depth/length, and breakout volume from the ticker's OHLCV bars. Standard library only.
-- `assets/evaluation_template.html` — the default output: a self-contained, theme-aware,
+- `scripts/html_to_pdf.py` — converts the filled report to the default PDF (headless
+  Chrome/Chromium/Edge → Playwright → WeasyPrint → wkhtmltopdf).
+- `assets/evaluation_template.html` — the report source: a self-contained, theme-aware,
   print-ready single-stock CAN SLIM scorecard driven by a `CONFIG` object. Pure-ASCII source.
 
 ## Requirements
 - IBKR MCP connector (read-only market data; never trades).
 - Fundamental-data connectors and/or web search in the session.
+- A PDF engine for the default output — headless **Chrome/Chromium/Edge** (preferred), or
+  `pip install playwright weasyprint`, or `wkhtmltopdf`. If none is present, the skill falls
+  back to delivering the HTML.
 
 ## Disclaimer
 Informational decision support, **not investment advice.** It never places orders and never
