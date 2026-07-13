@@ -2,19 +2,17 @@
 name: can-slim-grader
 description: >-
   Evaluate a single specified stock ticker against the CAN SLIM growth-investing model and
-  deliver a structured letter-by-letter (C-A-N-S-L-I-M) scorecard with a BUY-RANGE / WATCH /
-  AVOID verdict, rendered as a self-contained HTML dashboard you open in the browser (with an
-  optional PDF export). Use this whenever the user wants to
-  judge the QUALITY of one stock or asks whether a specific ticker is any good — "evaluate
-  NVDA", "is TSLA a good stock", "rate AAPL", "does PLTR pass CAN SLIM", "how does AMD score",
-  "should I be interested in MSFT", "grade this stock", "assess LLY", "is CRWD a buy", "what do
-  you think of ANET", "check the quality of <ticker>", "how strong is <company>". Works for any
-  publicly traded ticker; pulls live price/volume from the Interactive Brokers (IBKR) connector
-  and fundamentals from connected financial-data sources or the web. This is the single-stock
-  GRADING lens (one ticker in, a CAN SLIM verdict out) and the sister skill of
-  `can-slim-recommend` — for a ranked LIST of screened ideas use `can-slim-recommend` instead;
-  for a data-rich single-stock dashboard use `ibkr-review-ticker`. Analysis and decision
-  support, never personalized investment advice and never trading.
+  deliver a letter-by-letter (C-A-N-S-L-I-M) scorecard with a BUY-RANGE / WATCH / AVOID verdict,
+  rendered as a self-contained HTML dashboard (optional PDF export). Use whenever the user wants
+  to judge the QUALITY of one stock or whether a specific ticker is any good — "evaluate NVDA",
+  "is TSLA a good stock", "rate AAPL", "does PLTR pass CAN SLIM", "grade this stock", "is CRWD a
+  buy", "check the quality of <ticker>", "how strong is <company>". Works for any publicly
+  traded ticker; pulls live price/volume from the Interactive
+  Brokers (IBKR) connector and fundamentals from connected financial-data sources or the web.
+  This is the single-stock GRADING lens and the sister skill of `can-slim-recommend` — for a
+  ranked LIST of screened ideas use `can-slim-recommend`; for a data-rich single-stock dashboard
+  use `ibkr-review-ticker`. Analysis and decision support, never personalized investment advice
+  and never trading.
 ---
 
 # can-slim-grader — grade one ticker against CAN SLIM
