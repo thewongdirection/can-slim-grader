@@ -110,7 +110,42 @@ Grade C, A, N, S, L, I, M **pass / partial / fail** against the thresholds in th
 each letter's evidence concrete — cite the actual EPS/sales %, ROE, RS figure, base type, and %
 off high.
 
+**The grade must follow mechanically from the threshold and the actual you printed beside it.**
+This is where a grade quietly inflates: strong company, impressive quarter, and the letter drifts
+up to PASS while its own evidence says the bar was missed. Specifically:
+
+- If the `actual` or `read` concedes a miss — "just under the 25% mark", "hasn't cleared the
+  high", "falls short" — the grade **cannot be PASS**. Say partial and move on; a partial with
+  honest evidence is worth more than a pass that argues with itself.
+- Where the threshold says **each** ("EPS up each of the last 3 yrs at ≥25%"), *every* period must
+  clear it. One strong year among three below-bar years is a PARTIAL, not a PASS. Phrase these
+  thresholds with the word "each" so the report's own checks can see the requirement.
+- Magnitude of a beat, backlog, guidance, or a big volume day are **not** substitutes for the
+  numeric bar. They belong in the `read` as colour, not as grounds for promotion.
+- The report **audits itself** on render and prints a red "Report checks" banner listing any
+  contradictions it finds (grade vs evidence, score arithmetic, an entry price without a valid N,
+  a pivot below new-high ground, a stop that isn't 7-8%). **Never ship a report showing that
+  banner** — fix the grade or fix the evidence. Do not delete the check.
+
 ### 5 — Reach a verdict
+
+**What counts as a pivot** — get this wrong and the report invents a trade that the method would
+never take. A pivot exists only when **both** hold:
+
+1. **A sound base.** Per `canslim-methodology.md`: at least ~7-8 weeks (5-6 for a flat base, 4-7
+   for a square box), within the pattern's depth limits, formed *after* a prior uptrend of ≥30%,
+   with any handle in the **upper half** of the base, above the 10-week line, drifting down rather
+   than wedging up. A V-shaped snap-back off a low with no handle is explicitly a faulty pattern.
+2. **New high ground.** The breakout must be at or very near the **52-week high**, so there is no
+   meaningful overhead supply. As a hard filter, **a candidate pivot more than ~10% below the
+   52-week high is not a pivot** — it is a lower high with underwater holders stacked above it.
+
+A recent local high, a three-month high, or the top of a spike inside a downtrend is **not** a
+pivot, however strong the quarter or the volume on the day. A stock well below its 52-week high
+has no buy point, and the honest entry is **"None now" plus the condition that would create one**
+— even when C and A are strong, and even when the stock just gapped up on earnings. Record the
+52-week high in `CONFIG.high52` so the report can check any pivot you name against it.
+
 - **BUY-RANGE** — passes core C, A, L with a valid N (at/near a proper pivot in an uptrend).
 - **WATCH** — strong fundamentals but no valid buy point now (extended, base repairing, or M
   weak). Say what needs to happen.
@@ -208,6 +243,8 @@ verdict with the defensive rule (cut losses 7-8%).
 - `assets/evaluation_template.html` — the **default deliverable**: a self-contained, theme-aware
   (dark by default) single-stock CAN SLIM dashboard you open straight in the browser, driven by a
   `CONFIG` object (verdict badge, the seven-letter scorecard with evidence, the daily
-  candlestick chart, technicals, and the buy/sell plan). The chart is hand-rolled inline SVG —
+  candlestick chart, technicals, and the buy/sell plan). **It audits itself on render** and
+  banners any grade that contradicts its own evidence, a pivot that isn't in new-high ground, a
+  score that doesn't add up, or a stop that isn't 7-8%. The chart is hand-rolled inline SVG —
   no chart library, no network calls. Pure-ASCII source; print CSS keeps the dark background and
   colored badges/chips for the optional PDF export.

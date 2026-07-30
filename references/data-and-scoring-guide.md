@@ -142,7 +142,13 @@ the source ladder above.
 
 ## Scoring each letter (pass / partial / fail)
 
-Grade against the thresholds in `canslim-methodology.md`. Suggested rubric:
+Grade against the thresholds in `canslim-methodology.md`. **The grade must follow mechanically
+from the threshold and the actual figure** — if the evidence you print concedes the bar was
+missed ("just under 25%", "hasn't cleared the high"), the letter is not a PASS, no matter how
+impressive the quarter reads. Where a threshold says **each**, every period must clear it. The
+filled report audits itself on render and flags these contradictions; never ship one that does.
+
+Suggested rubric:
 
 - **C — Current quarterly earnings & sales.** PASS: latest-quarter EPS up ≥25% YoY (ideally
   40%+) **and** sales up ≥25% (or accelerating), growth accelerating. PARTIAL: positive but
@@ -154,6 +160,12 @@ Grade against the thresholds in `canslim-methodology.md`. Suggested rubric:
   the stock breaking out to a **new high from a sound base** now (at/near pivot). PARTIAL: has
   a "new" driver but extended, or repairing a base (not at a pivot). FAIL: no new driver, or
   making new lows / wide-loose base.
+  **Both halves are required for a PASS** — a genuine new driver alone is a PARTIAL at best. A
+  pivot needs a sound base (≥7-8 weeks, after a ≥30% advance, handle in the upper half above the
+  10-week line) **and** new high ground: a candidate pivot more than **~10% below the 52-week
+  high** is a lower high with overhead supply, not a buy point. A recent local high, a three-month
+  high, or the top of a spike inside a downtrend does not qualify — an earnings gap that is still
+  well below the 52-week high is base *repair*, and repair is a PARTIAL with no entry price.
 - **S — Supply & demand.** PASS: volume surging on up-moves / dry-up in the base, reasonable
   float, buybacks, low debt, management ownership. PARTIAL: mixed. FAIL: heavy distribution,
   bloated float, high debt/dilution.

@@ -31,7 +31,9 @@ tomorrow (or ten minutes later) re-measures rather than repeating. For the ticke
    financial-data sources (Daloopa / bigdata.com / LSEG / Financial Modeling Prep / SEC EDGAR)
    or the web.
 4. **Grades each of C·A·N·S·L·I·M** pass / partial / fail against the method's thresholds, with
-   the concrete numbers behind each grade.
+   the concrete numbers behind each grade — and the finished report **checks itself**, bannering
+   any letter whose grade contradicts the evidence printed beside it, a buy point that isn't in
+   new-high ground, a score that doesn't add up, or a stop that isn't 7–8%.
 5. Returns a **verdict** — BUY-RANGE (with pivot buy point + 7–8% stop), WATCH (what needs to
    happen), or AVOID (which letters it fails) — and never pretends high price strength alone
    makes a stock a buy without the earnings behind it.

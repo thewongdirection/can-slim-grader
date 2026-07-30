@@ -18,10 +18,20 @@
     script computes the averages over the whole series and emits only the ~3-month display
     window. Paste its output as CONFIG.priceChart. Empty `bars` hides the chart section.
 
+  SELF-AUDIT:
+    On render the page checks CONFIG against itself and prints a red "Report checks" banner at
+    the top listing any contradiction: a letter graded PASS whose own evidence concedes the bar
+    was missed, a PASS on an "each period" threshold with a below-bar figure in the evidence,
+    verdict score that doesn't match the letters, an entry price named while N is not PASS or
+    more than ~10% below CONFIG.high52, a stop that isn't 7-8% below entry, BUY-RANGE without
+    C/A/N/L passing, or a scorecard that isn't the seven letters in order.
+    NEVER ship a report showing that banner - fix the grade or the evidence, not the check.
+
   RULES:
     - Every letter's `read` must be expressed ONLY in CAN SLIM terms, and cite the concrete
       number (the EPS/sales %, RS figure, ROE, % off high, base type). No outside rationale.
-    - `score` per letter is exactly "pass" | "partial" | "fail".
+    - `score` per letter is exactly "pass" | "partial" | "fail", and must follow mechanically
+      from the `threshold` vs the `actual` printed beside it. A strong story is not a promotion.
     - verdict.label is "BUY-RANGE" | "WATCH" | "AVOID"; verdict.tone is "up" | "pressure" | "down".
     - Here the scorecard DOES include M (7 rows) because this is a single stock's full
       evaluation - M is shown as the market-context row.
@@ -80,6 +90,12 @@
   .plan-band .cell.stop .v{color:var(--fail)}
   .plan-band .n{font-size:12px;color:var(--muted);margin-top:4px}
   @media (max-width:520px){ .plan-band{grid-template-columns:1fr} }
+
+  /* Self-audit banner - only rendered when the report contradicts itself. */
+  .audit{background:var(--fail-bg);border:1px solid var(--fail);border-left:4px solid var(--fail);
+         border-radius:10px;padding:12px 15px;margin:16px 0 0;font-size:13.5px}
+  .audit h4{margin:0 0 6px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--fail)}
+  .audit ul{margin:0;padding-left:18px} .audit li{margin:4px 0}
 
   .section-title{font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:24px 0 10px}
   .section-note{font-weight:400;text-transform:none;letter-spacing:0;opacity:.72;font-size:11px}
@@ -159,6 +175,8 @@
     </div>
   </header>
 
+  <div id="audit"></div>
+
   <div class="verdict" id="verdict"></div>
 
   <div class="plan-band" id="planband"></div>
@@ -194,6 +212,10 @@ const CONFIG = {
   asOf: "YYYY-MM-DD (close)",
   dataSource: "IBKR + fundamentals",
 
+  // 52-week high. Required whenever entryStop.entry names a price: the report checks that any
+  // proposed pivot sits in new-high ground rather than being a lower high with overhead supply.
+  high52: null,
+
   verdict: {
     label: "WATCH",            // "BUY-RANGE" | "WATCH" | "AVOID"
     tone: "pressure",          // "up" | "pressure" | "down"
@@ -203,8 +225,18 @@ const CONFIG = {
   },
 
   // What the framework proposes for ENTRY (the pivot buy point; buy up to ~5% past it) and the
-  // STOP (7-8% below entry, 3% in a market correction). Give real prices when there is a valid
-  // pivot (BUY-RANGE); for WATCH/AVOID say "None now" + the condition, and still state the rule.
+  // STOP (7-8% below entry, 3% in a market correction).
+  //
+  // A PIVOT ONLY EXISTS WHEN BOTH HOLD:
+  //   1. the stock is emerging from a SOUND BASE (see canslim-methodology.md: >=7-8 weeks - 5-6
+  //      for a flat base, 4-7 for a square box - within the pattern's depth limits, after a prior
+  //      uptrend of >=30%, handle in the UPPER half of the base and above the 10-week line), and
+  //   2. the breakout is into NEW HIGH GROUND - at or very near the 52-week high, so there is no
+  //      meaningful overhead supply. A candidate pivot more than ~10% below the 52-week high is
+  //      NOT a pivot; it is a lower high with underwater holders stacked above it.
+  // A recent local high, a 3-month high, or the top of a spike inside a downtrend is NOT a pivot,
+  // however strong the earnings or the volume on the day. When there is no pivot, entry is
+  // "None now" + the condition that would create one - even when C and A are strong.
   entryStop: {
     entry: "$178.00 (pivot); buy up to +5% ($187)",
     entryNote: "Breakout above the base high on volume +40-50%",
@@ -494,6 +526,107 @@ if (ess.length){
 const bp = CONFIG.buyPlan||{};
 $("buyplan").innerHTML = '<div>'+esc(bp.text||"")+'</div>'+
   ((bp.items||[]).length?'<ul>'+bp.items.map(i=>'<li>'+esc(i)+'</li>').join('')+'</ul>':'');
+
+/* ---------- self-audit: the grade must follow from the evidence beside it ----------
+   These are consistency checks on CONFIG, not judgement. Anything they flag is a place where the
+   report contradicts itself or the method's own rules, and it renders at the top of the page so a
+   self-contradicting scorecard cannot ship quietly. Fix the report, don't delete the check. */
+(function audit(){
+  const L = CONFIG.letters||[], V = CONFIG.verdict||{}, ES = CONFIG.entryStop||{}, out = [];
+  const WEIGHT = {pass:1, partial:0.5, fail:0}, ORDER = "CANSLIM";
+  const of = k => L.find(x => String(x.key||"").toUpperCase() === k) || null;
+  const px = s => { const m = String(s==null?"":s).match(/\$?\s*([0-9][0-9,]*(?:\.[0-9]+)?)/);
+                    return m ? parseFloat(m[1].replace(/,/g,"")) : null; };
+
+  const keys = L.map(x => String(x.key||"").toUpperCase()).join("");
+  if (keys !== ORDER)
+    out.push("The scorecard must carry all seven letters in C-A-N-S-L-I-M order (found: "+(keys||"none")+").");
+
+  const tally = L.reduce((a,x) => a + (WEIGHT[x.score] === undefined ? 0 : WEIGHT[x.score]), 0);
+  const stated = parseFloat(String(V.scoreText||"").replace(/[^0-9.]/g," ").trim().split(/\s+/)[0]);
+  if (isFinite(stated) && Math.abs(stated - tally) > 0.01)
+    out.push("Verdict score reads \""+V.scoreText+"\" but the seven letters tally "+tally+
+             " / 7 (pass 1, partial 0.5, fail 0).");
+
+  // A letter graded PASS whose own threshold/actual/read concedes the bar was not met.
+  const CONCEDES = [/just under/i, /just below/i, /just shy/i, /shy of/i, /falls? short/i,
+                    /short of the/i, /miss(?:es)? the/i, /below the bar/i, /under the bar/i,
+                    /has ?n[o']t cleared/i, /have not cleared/i, /not yet cleared/i,
+                    /does ?n[o']t clear/i, /do not clear/i, /no pivot/i, /not a new high/i,
+                    /below the 25/i, /under the 25/i];
+  // Lowest percentage bar named in a threshold ("25-50%+" -> 25, ">=25%" -> 25).
+  const barOf = s => {
+    const r = String(s==null?"":s).match(/([0-9]+(?:\.[0-9]+)?)\s*-\s*[0-9]+(?:\.[0-9]+)?\s*%/);
+    if (r) return parseFloat(r[1]);
+    const m = String(s==null?"":s).match(/([0-9]+(?:\.[0-9]+)?)\s*%/);
+    return m ? parseFloat(m[1]) : null;
+  };
+  // Signed growth figures only (+32%, "up 18%") so flat quantities like "ROE 30.2%" are ignored.
+  const growthOf = s => {
+    const out2 = [], re = /(?:\+|\bup\s+)\s*([0-9]+(?:\.[0-9]+)?)\s*%/gi;
+    let m; while ((m = re.exec(String(s==null?"":s)))) out2.push(parseFloat(m[1]));
+    return out2;
+  };
+
+  L.forEach(x => {
+    if (x.score !== "pass") return;
+    const text = [x.threshold, x.actual, x.read].join(" ");
+    const hit = CONCEDES.find(re => re.test(text));
+    if (hit) out.push(x.key+" is graded PASS, but its own evidence concedes the bar was not met "+
+                      "(\""+(text.match(hit)||[""])[0]+"\"). The grade must follow the threshold vs actual.");
+    // "up EACH of the last 3 yrs at >=25%" means every period clears it, not just the best one.
+    if (/\b(each|every|all)\b/i.test(x.threshold||"")) {
+      const bar = barOf(x.threshold), below = growthOf(x.actual).filter(v => bar != null && v < bar);
+      if (below.length)
+        out.push(x.key+" is graded PASS on a threshold requiring EVERY period to clear "+bar+"%, but "+
+                 below.map(v=>v+"%").join(", ")+" in the evidence "+(below.length>1?"are":"is")+
+                 " below it. Re-grade, or restate `actual` if those figures are not the graded series.");
+    }
+  });
+
+  // A named entry price is a claim that a valid pivot exists - check it.
+  const entryTxt = String(ES.entry||"");
+  const named = !/none|no valid|not buyable|n\/a|^-?$/i.test(entryTxt.trim()) ? px(entryTxt) : null;
+  if (named != null) {
+    const n = of("N");
+    if (!n || n.score !== "pass")
+      out.push("An entry price ("+entryTxt+") is named while N is graded "+
+               String((n&&n.score)||"n/a").toUpperCase()+". A buy point exists only when N passes: a "+
+               "sound base AND a breakout into new-high ground.");
+    const hi = Number(CONFIG.high52);
+    if (isFinite(hi) && hi > 0) {
+      const off = (hi - named)/hi;
+      if (off > 0.10)
+        out.push("The named pivot "+named.toFixed(2)+" sits "+(off*100).toFixed(1)+"% below the 52-week "+
+                 "high ("+hi.toFixed(2)+"). That is a lower high with overhead supply above it, not a "+
+                 "CAN SLIM pivot.");
+    } else {
+      out.push("An entry price is named but CONFIG.high52 is missing, so the pivot could not be "+
+               "checked against new-high ground.");
+    }
+    const stop = px(ES.stop);
+    if (stop != null && stop < named) {
+      const d = (named - stop)/named;
+      if (d < 0.025 || d > 0.09)
+        out.push("The stop is "+(d*100).toFixed(1)+"% below the entry; the rule is 7-8% (3% in a "+
+                 "market correction).");
+    }
+  }
+
+  if (String(V.label||"").toUpperCase() === "BUY-RANGE") {
+    const missing = ["C","A","N","L"].filter(k => { const r = of(k); return !r || r.score !== "pass"; });
+    if (missing.length)
+      out.push("Verdict is BUY-RANGE but "+missing.join(", ")+" not graded PASS. BUY-RANGE requires the "+
+               "core earnings letters (C, A), leadership (L) and a valid N.");
+  }
+
+  if (out.length) {
+    $("audit").innerHTML = '<div class="audit"><h4>Report checks &mdash; '+out.length+
+      ' issue'+(out.length>1?'s':'')+' to resolve before this is trustworthy</h4><ul>'+
+      out.map(m => '<li>'+esc(m)+'</li>').join('')+'</ul></div>';
+    if (window.console) console.warn("can-slim-grader report checks:", out);
+  }
+})();
 
 $("disclaimer").textContent = CONFIG.disclaimer||'';
 if ((CONFIG.sources||[]).length){
