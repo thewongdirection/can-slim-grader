@@ -97,14 +97,25 @@ the source ladder above.
    `contract_id`. Note the company name and its sector/industry group (`get_company_themes`).
 2. **`get_price_snapshot`** `["last","year_to_date_change","misc_statistics"]` →
    last price, **52-week high/low** (compute **% off 52-week high**), YTD.
-3. **`get_price_history`** weekly ~1-2 yr (base shape) and daily ~6 mo (breakout volume, RS).
+3. **`get_price_history`** weekly ~1-2 yr (base shape) and daily **`period=TWO_YEARS`,
+   `step=ONE_DAY`** (~500 bars). Six months is enough for breakout volume and RS, but pull the
+   two-year daily series once and reuse it: the report's candlestick chart needs ~200 sessions
+   *before* the displayed window to seed the 200-day EMA.
    Run `scripts/relative_strength.py` (feed the ticker's bars + SPY's bars) for the **RS proxy**,
    **% off 52-week high**, **base depth/length**, and **breakout volume** deterministically.
-4. **Fundamentals** (from the ladder): last 2-3 quarters' EPS & sales growth YoY (accelerating?
+4. **Chart for the report:** run `scripts/chart_data.py` on the same daily bars —
+   `python scripts/chart_data.py bars.json --window 63 --marker <pivot>:Pivot:accent --js` — and
+   paste the result as `CONFIG.priceChart` in the dashboard (daily candles + 50/200-day EMA +
+   volume for the last ~3 months). It takes the IBKR response as-is, or `[t,o,h,l,c,v]` rows, or
+   Polygon/Massive `/v2/aggs` results. **Data-sourcing note:** the 200-day EMA is only as good as
+   the history behind it — with ~1 year of bars it is still converging at the left edge of the
+   window (the script says so and stamps a note on the chart); with <200 bars it is not drawn at
+   all. Everything else on the chart works from the display window alone.
+5. **Fundamentals** (from the ladder): last 2-3 quarters' EPS & sales growth YoY (accelerating?
    margins?); last 3 years' annual EPS + ROE + margins + next-year estimate; the "new" story
    (product/management/industry, IPO recency); institutional ownership trend; float, buybacks,
    debt/equity, management ownership.
-5. **Market direction (M):** pull SPY/QQQ daily bars (or web), count distribution days, check
+6. **Market direction (M):** pull SPY/QQQ daily bars (or web), count distribution days, check
    50/200-day trend → Confirmed uptrend / Under pressure / Correction.
 
 ---

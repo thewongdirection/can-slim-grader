@@ -9,6 +9,15 @@
        default). Optional: export a PDF with scripts/html_to_pdf.py (print CSS is A4/Letter,
        keeps the dark background).
 
+  THE DAILY CHART (CONFIG.priceChart):
+    Build it with scripts/chart_data.py - never hand-transcribe bars:
+      python scripts/chart_data.py <daily-bars>.json --window 63 --marker 178:Pivot:accent --js
+    Feed that script >= 1 year (ideally 2) of DAILY bars - e.g. IBKR get_price_history
+    step=ONE_DAY period=TWO_YEARS, or Massive /v2/aggs .../range/1/day/... - because the
+    200-day average needs ~200 sessions of history BEFORE the first visible candle. The
+    script computes the averages over the whole series and emits only the ~3-month display
+    window. Paste its output as CONFIG.priceChart. Empty `bars` hides the chart section.
+
   RULES:
     - Every letter's `read` must be expressed ONLY in CAN SLIM terms, and cite the concrete
       number (the EPS/sales %, RS figure, ROE, % off high, base type). No outside rationale.
@@ -35,13 +44,15 @@
     --accent:#5b8cff; --accent-soft:#1a2436; --chip:#212733;
     --pass:#3ecf8e; --pass-bg:#123122; --partial:#e0a94e; --partial-bg:#33280f;
     --fail:#f2776f; --fail-bg:#3a1512;
+    --ema50:#5b8cff; --ema200:#c084fc;
     --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
     --sans:'Inter',system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
   }
   /* Optional manual light override; dark stays the default even in a light-OS browser. */
   :root[data-theme="light"]{--bg:#f7f8fa;--panel:#ffffff;--ink:#1a1d24;--muted:#5b6472;--line:#e4e7ec;
       --accent:#1c64f2;--accent-soft:#e8f0fe;--chip:#eef1f5;
-      --pass:#0f9d58;--pass-bg:#e6f4ea;--partial:#c77700;--partial-bg:#fdf1dd;--fail:#c5221f;--fail-bg:#fce8e6;}
+      --pass:#0f9d58;--pass-bg:#e6f4ea;--partial:#c77700;--partial-bg:#fdf1dd;--fail:#c5221f;--fail-bg:#fce8e6;
+      --ema50:#1c64f2;--ema200:#7c3aed;}
 
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.5;-webkit-font-smoothing:antialiased}
@@ -84,6 +95,35 @@
   .kv b{color:var(--ink)}
   .read{font-size:14px;margin-top:6px}
 
+  /* Daily candlestick chart: price pane (candles + 2 moving averages) over a volume pane. */
+  .chartcard{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px 10px}
+  .chartcard svg{display:block;width:100%;height:auto;touch-action:none}
+  .clegend{display:flex;flex-wrap:wrap;gap:6px 16px;align-items:center;font-size:12px;color:var(--muted)}
+  .clegend .sw{display:inline-block;width:9px;height:11px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+  .clegend .sw.pc-up{background:var(--pass)} .clegend .sw.pc-dn{background:var(--fail)}
+  .clegend .ln{display:inline-block;width:16px;border-top:2px solid;margin-right:5px;vertical-align:4px}
+  .clegend b{color:var(--ink);font-family:var(--mono);font-weight:700}
+  .readout{font-family:var(--mono);font-size:12px;color:var(--ink);margin:7px 0 2px;min-height:16px;
+           overflow-x:auto;white-space:nowrap;scrollbar-width:none}
+  .readout::-webkit-scrollbar{display:none}
+  .readout .k{color:var(--muted)} .readout .up{color:var(--pass)} .readout .dn{color:var(--fail)}
+  .cnote{font-size:11.5px;color:var(--muted);margin-top:6px}
+  .pc-grid{stroke:var(--line);stroke-width:1}
+  .pc-ax{fill:var(--muted);font-family:var(--mono);font-size:11px}
+  .pc-up{fill:var(--pass);stroke:var(--pass);stroke-width:1}
+  .pc-dn{fill:var(--fail);stroke:var(--fail);stroke-width:1}
+  .pc-vup{fill:var(--pass);opacity:.5} .pc-vdn{fill:var(--fail);opacity:.5}
+  .pc-ma1{fill:none;stroke:var(--ema50);stroke-width:1.8;stroke-linejoin:round}
+  .pc-ma2{fill:none;stroke:var(--ema200);stroke-width:1.8;stroke-linejoin:round}
+  .pc-avg{stroke:var(--muted);stroke-width:1;stroke-dasharray:4 3;opacity:.85}
+  .pc-mark{stroke-width:1.2;stroke-dasharray:5 4}
+  .pc-mark.accent{stroke:var(--accent)} .pc-mark.pass{stroke:var(--pass)}
+  .pc-mark.fail{stroke:var(--fail)} .pc-mark.partial{stroke:var(--partial)}
+  .pc-marktx{font-family:var(--mono);font-size:10.5px}
+  .pc-marktx.accent{fill:var(--accent)} .pc-marktx.pass{fill:var(--pass)}
+  .pc-marktx.fail{fill:var(--fail)} .pc-marktx.partial{fill:var(--partial)}
+  .pc-cross{stroke:var(--muted);stroke-width:1;stroke-dasharray:2 3;opacity:.9;visibility:hidden}
+
   .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
   .stat{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
   .stat .l{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
@@ -99,8 +139,9 @@
     *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
     body{background:var(--bg)}
     .wrap{max-width:none;padding:0}
-    .row,.verdict,.stat,.callout{break-inside:avoid}
+    .row,.verdict,.stat,.callout,.chartcard{break-inside:avoid}
     a{color:inherit;text-decoration:none}
+    .pc-cross{display:none}
     @page{margin:12mm}
   }
 </style>
@@ -124,6 +165,9 @@
 
   <div class="section-title">CAN SLIM scorecard</div>
   <div id="letters"></div>
+
+  <div class="section-title" id="pricechart-title">Daily chart <span class="section-note" id="pricechart-sub"></span></div>
+  <div class="chartcard" id="pricechart"></div>
 
   <div class="section-title">Chart position &amp; technicals</div>
   <div class="grid" id="chart"></div>
@@ -175,6 +219,25 @@ const CONFIG = {
     //   actual:"EPS +32%, sales +35%",
     //   read:"Latest quarter EPS +32% / sales +35% and accelerating - clears the bar." },
   ],
+
+  // Daily candlestick chart - candles + 50/200-day EMA + volume, last ~3 months.
+  // BUILD IT WITH THE SCRIPT, don't hand-transcribe bars:
+  //   python scripts/chart_data.py <daily-bars>.json --window 63 --marker 178:Pivot:accent --js
+  // Feed that script the LONGEST daily series you can pull (>= 1 year, ideally 2 - e.g. IBKR
+  // get_price_history step=ONE_DAY period=TWO_YEARS). It computes the moving averages over the
+  // whole history and emits only the display window, so the 200-day line is properly seeded
+  // instead of restarting at the left edge of the chart.
+  // Leave `bars` empty to hide the entire chart section.
+  priceChart: {
+    windowLabel: "last 3 months",     // shown next to the section title
+    window: 63,                       // sessions to display if `bars` is longer (63 ~= 3 months)
+    bars: [],                         // [ "YYYY-MM-DD", open, high, low, close, volume ], oldest first
+    ema50: [],                        // aligned 1:1 with `bars`, null before seeding; omit to compute from bars
+    ema200: [],
+    avgVol: null,                     // 50-day average volume -> dashed line in the volume pane
+    markers: [],                      // [ { price:178, label:"Pivot", tone:"accent"|"pass"|"fail"|"partial" } ]
+    note: ""                          // caveat under the chart (the script fills this when history is thin)
+  },
 
   chart: [
     // { l:"Relative strength", v:"+51", tone:"pos" },
@@ -251,6 +314,173 @@ $("letters").innerHTML = (CONFIG.letters||[]).map(L=>{
     '</div>'+
   '</div>';
 }).join('');
+
+/* ---------- daily candlestick chart: candles + 50/200 MA + volume pane ---------- */
+(function priceChart(){
+  const pc = CONFIG.priceChart || {};
+  const host = $("pricechart"), ttl = $("pricechart-title"), sub = $("pricechart-sub");
+  const hide = ()=>{ if(host) host.style.display='none'; if(ttl) ttl.style.display='none'; };
+  if (!host) return;
+
+  const all = (pc.bars||[]).map(b=> Array.isArray(b)
+      ? {d:String(b[0]||""), o:+b[1], h:+b[2], l:+b[3], c:+b[4], v:+(b[5]||0)}
+      : {d:String(b.d||b.date||""), o:+b.o, h:+b.h, l:+b.l, c:+b.c, v:+(b.v||0)}
+    ).filter(r=> isFinite(r.o)&&isFinite(r.h)&&isFinite(r.l)&&isFinite(r.c));
+  if (all.length < 2) { hide(); return; }
+
+  // Moving averages: use the supplied series when it lines up with the bars (chart_data.py
+  // computes them over the full history); otherwise derive them from whatever bars are here.
+  const ema = (vals,n)=>{
+    const out = vals.map(()=>null);
+    if (vals.length < n) return out;
+    let e = 0; for (let i=0;i<n;i++) e += vals[i];
+    e /= n; out[n-1] = e;
+    const k = 2/(n+1);
+    for (let i=n;i<vals.length;i++){ e = vals[i]*k + e*(1-k); out[i] = e; }
+    return out;
+  };
+  const num = x => (typeof x === "number" && isFinite(x)) ? x : null;
+  const fitted = a => Array.isArray(a) && a.length === all.length ? a.map(num) : null;
+  const closes = all.map(r=>r.c);
+  let ma1 = fitted(pc.ema50)  || ema(closes,50);
+  let ma2 = fitted(pc.ema200) || ema(closes,200);
+
+  const win = Math.max(5, +pc.window || 63);
+  const from = Math.max(0, all.length - win);
+  const rows = all.slice(from); ma1 = ma1.slice(from); ma2 = ma2.slice(from);
+  const n = rows.length;
+  const labels = Array.isArray(pc.emaLabels) && pc.emaLabels.length === 2 ? pc.emaLabels : ["50 EMA","200 EMA"];
+
+  // geometry: price pane over a volume pane, price axis on the right
+  const W=920, PADL=10, PADR=58, plotW=W-PADL-PADR;
+  const priceTop=12, priceBot=292, volTop=322, volBot=392, xLabY=408, H=414;
+  const bw = plotW/n, bodyW = Math.max(1.4, Math.min(14, bw*0.62));
+  const cx = i => PADL + bw*(i+0.5);
+  const n2 = v => Math.round(v*100)/100;
+
+  const dp = Math.max(...closes) < 1 ? 4 : 2;
+  const fmtP = v => (v==null||!isFinite(v)) ? "-" : (+v).toFixed(dp);
+  const fmtV = v => { v = +v||0;
+    return v>=1e9 ? (v/1e9).toFixed(2)+"B" : v>=1e6 ? (v/1e6).toFixed(1)+"M"
+         : v>=1e3 ? (v/1e3).toFixed(0)+"K" : String(Math.round(v)); };
+
+  // price scale spans candles + both averages, plus any marker that is actually near the action
+  let lo = Math.min.apply(null, rows.map(r=>r.l));
+  let hi = Math.max.apply(null, rows.map(r=>r.h));
+  const mavals = ma1.concat(ma2).filter(x=>x!=null);
+  if (mavals.length){ lo = Math.min(lo, Math.min.apply(null,mavals)); hi = Math.max(hi, Math.max.apply(null,mavals)); }
+  const span0 = (hi-lo) || Math.abs(hi) || 1;
+  const marks = (pc.markers||[]).filter(m=>m && isFinite(+m.price))
+    .map(m=>({price:+m.price, label:String(m.label||""), tone:(m.tone||"accent")}))
+    .filter(m=> m.price > lo-0.2*span0 && m.price < hi+0.2*span0);
+  marks.forEach(m=>{ lo=Math.min(lo,m.price); hi=Math.max(hi,m.price); });
+  const pad = (hi-lo)*0.06 || Math.abs(hi)*0.02 || 1;
+  lo -= pad; hi += pad;
+  const yP = p => priceBot - (p-lo)/(hi-lo)*(priceBot-priceTop);
+
+  const vmax = Math.max(1, Math.max.apply(null, rows.map(r=>r.v)));
+  const yV = v => volBot - (Math.max(0,v)/vmax)*(volBot-volTop);
+  const avgVol = num(pc.avgVol) || (rows.reduce((a,r)=>a+r.v,0)/n);
+
+  const ticks = (function(a,b,want){
+    const raw=(b-a)/want, mag=Math.pow(10,Math.floor(Math.log10(raw||1))), q=raw/mag;
+    const step=(q<=1?1:q<=2?2:q<=5?5:10)*mag, out=[];
+    for(let t=Math.ceil(a/step)*step; t<=b+1e-9 && out.length<12; t+=step) out.push(t);
+    return out;
+  })(lo,hi,5);
+
+  const MON=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const s = [];
+  s.push('<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Daily candlestick chart with '+
+         esc(labels[0])+', '+esc(labels[1])+' and volume">');
+
+  ticks.forEach(t=>{ const y=n2(yP(t));
+    s.push('<line class="pc-grid" x1="'+PADL+'" y1="'+y+'" x2="'+(W-PADR)+'" y2="'+y+'"/>');
+    s.push('<text class="pc-ax" x="'+(W-PADR+7)+'" y="'+n2(y+3.5)+'">'+fmtP(t)+'</text>'); });
+
+  rows.forEach((r,i)=>{ const m=r.d.slice(5,7);
+    if (!m || (i>0 && m===rows[i-1].d.slice(5,7))) return;
+    const x=n2(cx(i)), lbl=(MON[+m-1]||r.d.slice(0,7))+(m==="01"?" "+r.d.slice(0,4):"");
+    s.push('<line class="pc-grid" x1="'+x+'" y1="'+priceTop+'" x2="'+x+'" y2="'+volBot+'" opacity=".5"/>');
+    s.push('<text class="pc-ax" x="'+x+'" y="'+xLabY+'" text-anchor="middle">'+lbl+'</text>'); });
+
+  const path = arr => { let d="", pen=false;
+    arr.forEach((v,i)=>{ if(v==null){ pen=false; return; }
+      d += (pen?"L":"M")+n2(cx(i))+" "+n2(yP(v)); pen=true; });
+    return d; };
+  const p1=path(ma1), p2=path(ma2);
+  if (p2) s.push('<path class="pc-ma2" d="'+p2+'"/>');
+  if (p1) s.push('<path class="pc-ma1" d="'+p1+'"/>');
+
+  rows.forEach((r,i)=>{ const up=r.c>=r.o, k=up?"pc-up":"pc-dn", x=n2(cx(i));
+    s.push('<line class="'+k+'" x1="'+x+'" y1="'+n2(yP(r.h))+'" x2="'+x+'" y2="'+n2(yP(r.l))+'"/>');
+    const yt=yP(Math.max(r.o,r.c)), yb=yP(Math.min(r.o,r.c));
+    s.push('<rect class="'+k+'" x="'+n2(x-bodyW/2)+'" y="'+n2(yt)+'" width="'+n2(bodyW)+
+           '" height="'+n2(Math.max(1,yb-yt))+'"/>'); });
+
+  marks.forEach(m=>{ const y=n2(yP(m.price));
+    s.push('<line class="pc-mark '+esc(m.tone)+'" x1="'+PADL+'" y1="'+y+'" x2="'+(W-PADR)+'" y2="'+y+'"/>');
+    if (m.label) s.push('<text class="pc-marktx '+esc(m.tone)+'" x="'+(PADL+5)+'" y="'+n2(y-4)+'">'+
+                        esc(m.label)+' '+fmtP(m.price)+'</text>'); });
+
+  s.push('<line class="pc-grid" x1="'+PADL+'" y1="'+volBot+'" x2="'+(W-PADR)+'" y2="'+volBot+'"/>');
+  rows.forEach((r,i)=>{ const y=n2(yV(r.v));
+    s.push('<rect class="'+(r.c>=r.o?"pc-vup":"pc-vdn")+'" x="'+n2(cx(i)-bodyW/2)+'" y="'+y+
+           '" width="'+n2(bodyW)+'" height="'+n2(Math.max(0.6,volBot-y))+'"/>'); });
+  if (avgVol>0 && avgVol<=vmax){ const y=n2(yV(avgVol));
+    s.push('<line class="pc-avg" x1="'+PADL+'" y1="'+y+'" x2="'+(W-PADR)+'" y2="'+y+'"/>');
+    s.push('<text class="pc-ax" x="'+(W-PADR+7)+'" y="'+n2(y+3.5)+'">'+fmtV(avgVol)+'</text>'); }
+  s.push('<text class="pc-ax" x="'+(W-PADR+7)+'" y="'+(volTop+9)+'">'+fmtV(vmax)+'</text>');
+  s.push('<line class="pc-cross" id="pc-cross" x1="0" y1="'+priceTop+'" x2="0" y2="'+volBot+'"/>');
+  s.push('</svg>');
+
+  const last = rows[n-1], first = rows[0];
+  const swatch = (cls,txt)=>'<span><span class="sw '+cls+'"></span>'+txt+'</span>';
+  const line = (v,txt,val)=>'<span><span class="ln" style="border-color:var('+v+')"></span>'+txt+
+                            (val!=null?' <b>'+fmtP(val)+'</b>':' <b>n/a</b>')+'</span>';
+  host.innerHTML =
+    '<div class="clegend">'+
+      swatch('pc-up','up day')+swatch('pc-dn','down day')+
+      line('--ema50', labels[0], ma1[n-1])+ line('--ema200', labels[1], ma2[n-1])+
+      '<span><span class="ln" style="border-top-style:dashed;border-color:var(--muted)"></span>'+
+      '50-day avg vol <b>'+fmtV(avgVol)+'</b></span>'+
+    '</div>'+
+    '<div class="readout" id="pc-readout"></div>'+
+    s.join('')+
+    (pc.note?'<div class="cnote">'+esc(pc.note)+'</div>':'');
+
+  if (sub) sub.innerHTML = '&mdash; '+esc(pc.windowLabel||("last "+n+" sessions"))+' ('+esc(first.d)+
+    ' to '+esc(last.d)+'), '+n+' sessions &middot; hover for values';
+
+  const svgEl = host.querySelector("svg"), cross = host.querySelector("#pc-cross"),
+        read = host.querySelector("#pc-readout");
+  function show(i){
+    const r = rows[i]; if(!r) return;
+    const prev = i>0 ? rows[i-1].c : r.o;
+    const chg = prev ? (r.c/prev-1)*100 : 0, up = chg>=0;
+    read.innerHTML = '<span class="k">'+esc(r.d)+'</span>&nbsp; O '+fmtP(r.o)+'&nbsp; H '+fmtP(r.h)+
+      '&nbsp; L '+fmtP(r.l)+'&nbsp; C <span class="'+(up?'up':'dn')+'">'+fmtP(r.c)+
+      ' ('+(up?'+':'')+chg.toFixed(2)+'%)</span>&nbsp; Vol '+fmtV(r.v)+
+      '&nbsp; <span class="k">'+esc(labels[0])+'</span> '+fmtP(ma1[i])+
+      '&nbsp; <span class="k">'+esc(labels[1])+'</span> '+fmtP(ma2[i]);
+  }
+  function at(clientX){
+    const box = svgEl.getBoundingClientRect();
+    if (!box.width) return 0;
+    const x = (clientX-box.left)*(W/box.width);
+    return Math.max(0, Math.min(n-1, Math.floor((x-PADL)/bw)));
+  }
+  function track(clientX){
+    const i = at(clientX); show(i);
+    cross.setAttribute("x1", n2(cx(i))); cross.setAttribute("x2", n2(cx(i)));
+    cross.style.visibility = "visible";
+  }
+  svgEl.addEventListener("mousemove", e=>track(e.clientX));
+  svgEl.addEventListener("touchstart", e=>{ if(e.touches[0]) track(e.touches[0].clientX); }, {passive:true});
+  svgEl.addEventListener("touchmove",  e=>{ if(e.touches[0]) track(e.touches[0].clientX); }, {passive:true});
+  svgEl.addEventListener("mouseleave", ()=>{ cross.style.visibility="hidden"; show(n-1); });
+  show(n-1);
+})();
 
 $("chart").innerHTML = (CONFIG.chart||[]).map(s=>
   '<div class="stat"><div class="l">'+esc(s.l)+'</div><div class="v '+(s.tone||'')+'">'+esc(s.v)+'</div></div>').join('');

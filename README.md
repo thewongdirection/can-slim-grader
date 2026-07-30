@@ -22,7 +22,9 @@ dashboard, use `ibkr-review-ticker`.
 For the ticker you name it:
 1. Assesses **market direction (M)** first (the gate).
 2. Pulls the stock's **live price/volume/52-week stats** (IBKR) and computes relative strength,
-   % off 52-week high, base shape, and breakout volume.
+   % off 52-week high, base shape, and breakout volume — and draws a **daily candlestick chart**
+   of the last ~3 months with the **50- and 200-day EMA**, a **volume pane** (with the 50-day
+   average line), and dashed markers at the pivot and stop.
 3. Gathers **fundamentals** (quarterly & annual earnings, sales, ROE, ownership) from connected
    financial-data sources (Daloopa / bigdata.com / LSEG / Financial Modeling Prep / SEC EDGAR)
    or the web.
@@ -51,11 +53,16 @@ For the ticker you name it:
   fundamental source-priority ladder, and the pass/partial/fail scoring rubric + verdict rules.
 - `scripts/relative_strength.py` — computes the RS proxy, % off 52-week high, base
   depth/length, and breakout volume from the ticker's OHLCV bars. Standard library only.
+- `scripts/chart_data.py` — turns daily OHLCV bars (IBKR / row-array / Polygon-Massive shapes)
+  into the report's `priceChart` block: candles for the display window plus the 50/200-day
+  EMA (or SMA) computed over the *full* history and the 50-day average volume. Standard
+  library only.
 - `scripts/html_to_pdf.py` — **optional** PDF export for the dashboard (headless
   Chrome/Chromium/Edge → Playwright → WeasyPrint → wkhtmltopdf).
 - `assets/evaluation_template.html` — the **default deliverable**: a self-contained, theme-aware
   (dark by default) single-stock CAN SLIM dashboard you open in the browser, driven by a `CONFIG`
-  object. Pure-ASCII source.
+  object. The candlestick chart is hand-rolled inline SVG — no chart library and no network
+  calls, so the file stays a single self-contained page. Pure-ASCII source.
 
 ## Requirements
 - IBKR MCP connector (read-only market data; never trades).

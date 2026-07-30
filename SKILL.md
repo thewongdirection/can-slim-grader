@@ -23,8 +23,9 @@ lens** — one ticker in, one verdict out. They share `references/canslim-method
 `scripts/relative_strength.py` verbatim.
 
 Takes **one ticker** and grades it, letter by letter, against the seven CAN SLIM criteria,
-then returns a **BUY-RANGE / WATCH / AVOID** verdict with the evidence, a chart-position read,
-and — if it's actionable — the pivot buy point and the 7-8% loss-cutting stop. Output is a
+then returns a **BUY-RANGE / WATCH / AVOID** verdict with the evidence, a chart-position read
+(including a **daily candlestick chart** of the last ~3 months with the 50/200-day EMA and
+volume), and — if it's actionable — the pivot buy point and the 7-8% loss-cutting stop. Output is a
 self-contained **HTML dashboard** by default — a single file you open straight in the browser
 (theme-aware, dark by default) — with an **optional PDF export** for sharing/printing.
 **Decision support, not advice, and never an order.**
@@ -72,9 +73,12 @@ graded letters.
 
 ### 3 — Gather the stock's data
 Per `data-and-scoring-guide.md`: `get_price_snapshot` (52-week high/low, price, YTD) and
-`get_price_history` (weekly ~1-2 yr for base shape; daily ~6 mo for breakout volume & RS). Run
+`get_price_history` (weekly ~1-2 yr for base shape; **daily `period=TWO_YEARS`** — 6 months
+covers breakout volume & RS, but the report's chart needs ~200 sessions of history before the
+window to seed the 200-day EMA, so pull the long daily series once and use it for both). Run
 `scripts/relative_strength.py` on the ticker's bars + SPY's bars for the RS proxy, % off
-52-week high, base depth/length, and breakout volume. Then gather fundamentals (C, A, N, I) from
+52-week high, base depth/length, and breakout volume, and `scripts/chart_data.py` on the same
+daily bars for the report's candlestick chart. Then gather fundamentals (C, A, N, I) from
 the source ladder — prefer connected financial data over generic web search. For a deeper
 financial picture you may fold in the `ibkr-review-ticker` skill.
 
@@ -100,11 +104,22 @@ off high.
    to ~5% past it), stop = 7-8% below entry (3% in a correction)**; give real prices when there
    is a valid pivot, else "None now" + the condition, the
    seven `letters` (each with score, the bar, the actual value, and a CAN-SLIM-only `read`), the
+   `priceChart` daily candlestick chart (step 1b), the
    `chart` technicals (RS, % off high, base, pivot, breakout volume), the optional
    `essentials` reference stats (P/E, forward P/E, market cap, EPS, yield, beta, shares,
    avg $ volume, next earnings — **reference only, not a CAN SLIM input**; leave empty to
    hide), the `buyPlan` (pivot, 7-8% stop, profit-taking, sell signals to watch),
    disclaimer and sources.
+1b. **Build the daily chart** — candlesticks + 50/200-day EMA + volume for the last ~3 months.
+   Never hand-transcribe bars; pipe the daily OHLCV you already pulled through the script:
+   `python scripts/chart_data.py <bars>.json --window 63 --marker <pivot>:Pivot:accent --js`
+   (it reads IBKR `get_price_history` responses, `[t,o,h,l,c,v]` rows, or Polygon/Massive
+   `/v2/aggs` results) and paste its output as `CONFIG.priceChart`. **Feed it ≥1 year of daily
+   bars, ideally 2** (`period=TWO_YEARS`, `step=ONE_DAY`) — the 200-day EMA needs ~200 sessions
+   *before* the first visible candle, and the script warns and annotates the chart when the
+   history is too thin. Add `--marker` lines for the pivot and the 7-8% stop so the chart shows
+   the same prices as the entry/stop band. If price data is unavailable, leave `bars` empty —
+   the chart section hides itself — and say the chart was omitted for lack of data.
 2. **Deliver the HTML dashboard — this is the default deliverable.** The filled
    `<TICKER>-canslim.html` is fully self-contained (no external assets), theme-aware, and dark
    by default. Give the user the file and **open it in the browser** for them (e.g. launch
@@ -157,12 +172,17 @@ verdict with the defensive rule (cut losses 7-8%).
   fundamental source ladder, and the pass/partial/fail scoring rubric + verdict definitions.
 - `scripts/relative_strength.py` — computes the RS proxy, % off 52-week high, base
   depth/length, and breakout volume from the ticker's OHLCV bars vs SPY. Pure standard library.
+- `scripts/chart_data.py` — builds the report's `priceChart` block (daily candles + 50/200-day
+  EMA/SMA + 50-day average volume) from daily OHLCV bars. Accepts IBKR, row-array, or
+  Polygon/Massive shapes; computes the averages over the full history and emits only the
+  display window. Pure standard library.
 - `scripts/html_to_pdf.py` — **optional** helper that exports the filled HTML dashboard to a PDF
   for sharing/printing (not the default deliverable). Multi-engine (headless Chrome/Chromium/Edge
   with header/footer suppressed → Playwright → WeasyPrint → wkhtmltopdf); prints the engine used.
   Pure standard library (uses whatever browser/lib is present).
 - `assets/evaluation_template.html` — the **default deliverable**: a self-contained, theme-aware
   (dark by default) single-stock CAN SLIM dashboard you open straight in the browser, driven by a
-  `CONFIG` object (verdict badge, the seven-letter scorecard with evidence, technicals, and the
-  buy/sell plan). Pure-ASCII source; print CSS keeps the dark background and colored badges/chips
-  for the optional PDF export.
+  `CONFIG` object (verdict badge, the seven-letter scorecard with evidence, the daily
+  candlestick chart, technicals, and the buy/sell plan). The chart is hand-rolled inline SVG —
+  no chart library, no network calls. Pure-ASCII source; print CSS keeps the dark background and
+  colored badges/chips for the optional PDF export.
