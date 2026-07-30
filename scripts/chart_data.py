@@ -49,7 +49,7 @@ def _date(t):
         return t[:10]
     if isinstance(t, (int, float)):
         secs = t / 1000.0 if t > 1e11 else float(t)  # millis vs seconds
-        return _dt.datetime.utcfromtimestamp(secs).strftime("%Y-%m-%d")
+        return _dt.datetime.fromtimestamp(secs, _dt.timezone.utc).strftime("%Y-%m-%d")
     return ""
 
 
@@ -142,9 +142,17 @@ def sma(values, n):
 
 
 def avg_volume(vols, n=50):
-    if len(vols) < n:
-        return round(sum(vols) / len(vols)) if vols else None
-    return round(sum(vols[-n:]) / n)
+    """Average volume of the n sessions BEFORE the latest bar.
+
+    Excluding the latest bar matters: it is the one being judged. A breakout day of 3x normal
+    volume would otherwise drag its own benchmark up and understate the surge. This matches
+    scripts/relative_strength.py's breakout_volume, so the chart's dashed average line and the
+    report's "+N% vs the 50-day average" are the same measurement.
+    """
+    prior = vols[:-1]
+    if not prior:
+        return None
+    return round(sum(prior[-n:]) / min(n, len(prior)))
 
 
 # --------------------------------------------------------------------------- output
@@ -270,11 +278,11 @@ def main():
     else:
         sys.stdout.write(text + "\n")
     # Always state what the data is as-of - the grade is only valid as of this bar.
+    age = chart.get("barAgeDays")
+    # age can be <= 0 when the runner's clock is a day ahead of the exchange - still current.
     sys.stderr.write("chart_data: newest bar %s (%s)\n"
                      % (chart.get("lastBar"),
-                        "today" if chart.get("barAgeDays") == 0 else
-                        "%s days old" % chart.get("barAgeDays") if chart.get("barAgeDays") is not None
-                        else "age unknown"))
+                        "age unknown" if age is None else "today" if age <= 0 else "%d days old" % age))
     for w in warnings:
         sys.stderr.write("chart_data: WARNING - %s\n" % w)
 

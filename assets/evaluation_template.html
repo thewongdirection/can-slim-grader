@@ -266,7 +266,9 @@ const CONFIG = {
     bars: [],                         // [ "YYYY-MM-DD", open, high, low, close, volume ], oldest first
     ema50: [],                        // aligned 1:1 with `bars`, null before seeding; omit to compute from bars
     ema200: [],
-    avgVol: null,                     // 50-day average volume -> dashed line in the volume pane
+    avgVol: null,                     // avg volume of the 50 sessions BEFORE the latest bar (dashed
+                                      // line in the volume pane) - excluding the latest bar keeps a
+                                      // surge day from inflating its own benchmark
     markers: [],                      // [ { price:178, label:"Pivot", tone:"accent"|"pass"|"fail"|"partial" } ]
     note: ""                          // caveat under the chart (the script fills this when history is thin)
   },
@@ -541,6 +543,11 @@ $("buyplan").innerHTML = '<div>'+esc(bp.text||"")+'</div>'+
   const keys = L.map(x => String(x.key||"").toUpperCase()).join("");
   if (keys !== ORDER)
     out.push("The scorecard must carry all seven letters in C-A-N-S-L-I-M order (found: "+(keys||"none")+").");
+
+  // An unrecognised score would silently weigh 0 and only surface as a confusing tally mismatch.
+  L.forEach(x => { if (WEIGHT[x.score] === undefined)
+    out.push(String(x.key||"?")+' has score "'+String(x.score)+'" - it must be exactly "pass", '+
+             '"partial" or "fail", and is being counted as 0.'); });
 
   const tally = L.reduce((a,x) => a + (WEIGHT[x.score] === undefined ? 0 : WEIGHT[x.score]), 0);
   const stated = parseFloat(String(V.scoreText||"").replace(/[^0-9.]/g," ").trim().split(/\s+/)[0]);
