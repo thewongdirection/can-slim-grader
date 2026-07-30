@@ -20,7 +20,9 @@ INPUT (auto-detected, file argument or stdin):
   3. Polygon / Massive `/v2/aggs` - {"results":[{"t":ms,"o":..,"h":..,"l":..,"c":..,"v":..}, ...]}
   Timestamps may be epoch seconds, epoch millis, or an ISO string; only the date is kept.
 
-OUTPUT: JSON on stdout - paste it as CONFIG.priceChart in the filled dashboard.
+OUTPUT: JSON on stdout - paste it as CONFIG.priceChart in the filled dashboard. It carries
+`lastBar` / `barAgeDays` so the report states what the data is as-of, and the script warns (and
+annotates the chart) when the newest bar is stale - bars must be re-pulled every run, never reused.
 
 Usage:
   python chart_data.py nvda_daily.json                     # last 63 sessions, 50/200 EMA
@@ -151,7 +153,15 @@ def _px(x, dp):
     return None if x is None else round(float(x), dp)
 
 
-def build(rows, window, ma_type, periods, markers, label):
+def bar_age_days(last_date):
+    """Calendar days between the newest bar and today, or None if the date is unparseable."""
+    try:
+        return (_dt.date.today() - _dt.date.fromisoformat(last_date)).days
+    except (ValueError, TypeError):
+        return None
+
+
+def build(rows, window, ma_type, periods, markers, label, stale_after=4):
     closes = [r[4] for r in rows]
     fn = sma if ma_type == "sma" else ema
     fast, slow = periods
@@ -185,8 +195,16 @@ def build(rows, window, ma_type, periods, markers, label):
                         % (history, slow, slow + window))
     if len(win) < window:
         warnings.append("input has %d bars; the window was trimmed to that." % len(win))
+
+    # Freshness: a grade is only valid as of its newest bar. Refuse to publish quietly on stale data.
+    age = bar_age_days(win[-1][0]) if win else None
+    if age is not None and age > stale_after:
+        warnings.append("STALE - the newest bar is %s, %d days old. Re-pull the price history; do not "
+                        "publish a grade on cached bars." % (win[-1][0], age))
     if warnings:
         out["note"] = "Chart data: " + " ".join(warnings)
+    out["lastBar"] = win[-1][0] if win else None
+    out["barAgeDays"] = age
     return out, warnings
 
 
@@ -215,6 +233,8 @@ def main():
     ap.add_argument("--periods", default="50,200", help="fast,slow MA periods (default 50,200)")
     ap.add_argument("--marker", action="append", type=parse_marker, default=[],
                     metavar="PRICE[:LABEL[:TONE]]", help="horizontal line, e.g. 178:Pivot:accent (repeatable)")
+    ap.add_argument("--stale-after", type=int, default=4, metavar="DAYS",
+                    help="warn when the newest bar is older than this many calendar days (default 4)")
     ap.add_argument("--label", help='window label shown in the report (default "last N sessions")')
     ap.add_argument("--js", action="store_true", help='emit "priceChart: {...}," ready to paste into CONFIG')
     ap.add_argument("--out", help="write to this file instead of stdout")
@@ -236,7 +256,8 @@ def main():
     window = args.months * MONTH_SESSIONS if args.months else args.window
     label = args.label or ("last %d months" % args.months if args.months else "last 3 months")
     rows = load_rows(data)
-    chart, warnings = build(rows, max(5, window), args.type, periods, args.marker, label)
+    chart, warnings = build(rows, max(5, window), args.type, periods, args.marker, label,
+                            stale_after=args.stale_after)
 
     text = json.dumps(chart, indent=2)
     if args.js:
@@ -248,6 +269,12 @@ def main():
                          % (args.out, len(chart["bars"]), len(rows)))
     else:
         sys.stdout.write(text + "\n")
+    # Always state what the data is as-of - the grade is only valid as of this bar.
+    sys.stderr.write("chart_data: newest bar %s (%s)\n"
+                     % (chart.get("lastBar"),
+                        "today" if chart.get("barAgeDays") == 0 else
+                        "%s days old" % chart.get("barAgeDays") if chart.get("barAgeDays") is not None
+                        else "age unknown"))
     for w in warnings:
         sys.stderr.write("chart_data: WARNING - %s\n" % w)
 

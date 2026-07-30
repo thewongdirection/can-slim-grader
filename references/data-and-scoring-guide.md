@@ -4,6 +4,26 @@ Read this with `canslim-methodology.md` before evaluating. It maps each of the s
 letters to concrete data you gather for the single specified ticker, and defines how to score
 each letter **pass / partial / fail** and reach an overall verdict.
 
+## Freshness rule (read first)
+
+**Every run pulls its own data.** Nothing below may be answered from a previous run, a previous
+session, or from earlier in the same conversation — re-call the tools each time, even for the same
+ticker minutes later, and rebuild the report from the new numbers. A "re-check" is a full re-run,
+not an edit of the last report. Concretely:
+
+- Re-fetch the snapshot **and** the price history every run; regenerate `bars.json` / the
+  `priceChart` block rather than reusing files on disk.
+- Record the as-of from the **data**: the newest bar's date, and the snapshot's `ts` /
+  `is_close` flag. IBKR quotes here are **15-minute delayed**; while the session is open the last
+  bar is a live, still-moving bar — label the grade intraday and provisional.
+- `scripts/chart_data.py` prints `newest bar <date>` on every run and warns when it is older than
+  `--stale-after` days (default 4). A stale newest bar is a data problem — fix it, don't publish
+  around it.
+- Re-pull fundamentals too. An earnings release between two runs can change C, A **and** the chart
+  in one session (MSFT's FY26 Q4 landed overnight and moved the stock 16% the next morning).
+- If a source is unavailable this run, say so in the report and move down the ladder below —
+  never substitute a figure you remember from before.
+
 The IBKR connector (if available) supplies **live price/volume, 52-week stats, and
 sector/theme groupings**; it does **not** supply company fundamentals. So:
 

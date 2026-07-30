@@ -19,7 +19,9 @@ dashboard, use `ibkr-review-ticker`.
 
 ## What it does
 
-For the ticker you name it:
+Every run pulls its own data — prices, volume and fundamentals are re-fetched on each invocation
+and the report is rebuilt from them. Nothing is carried over from a previous run, so asking again
+tomorrow (or ten minutes later) re-measures rather than repeating. For the ticker you name it:
 1. Assesses **market direction (M)** first (the gate).
 2. Pulls the stock's **live price/volume/52-week stats** (IBKR) and computes relative strength,
    % off 52-week high, base shape, and breakout volume — and draws a **daily candlestick chart**

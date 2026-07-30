@@ -61,6 +61,28 @@ fundamental source-priority ladder, and the pass/partial/fail rubric per letter.
 ## Workflow
 Work in order; keep the user informed.
 
+### 0 — Pull everything fresh, every single run
+**A grade is only as good as the moment it was measured.** Every number in the report must come
+from a tool call made *in this run*:
+
+- **Never reuse** prices, bars, fundamentals, script output (`bars.json`, `chart.json`), or a filled
+  `<TICKER>-canslim.html` from an earlier run, an earlier session, or earlier in this conversation —
+  **even for the same ticker, even minutes later.** Re-call the tools and rebuild from scratch.
+  Prices move intraday, and a quarter can land between two runs.
+- **A re-check is a full re-run.** "Re-assess it", "is that still true?", "check MSFT again" means
+  pull the data again and re-grade — never answer from the previous verdict, and never patch one
+  figure into an old report.
+- **Overwrite the intermediates.** Write this run's bars/chart JSON fresh; never read whatever
+  happens to be on disk from last time.
+- **Timestamp from the data, not the wall clock.** Take the as-of from what the provider returned
+  (newest bar date, snapshot `ts`), and state whether it is a **close or intraday**, plus the feed
+  delay (IBKR quotes here are 15-minute delayed). An intraday grade is provisional — say so.
+- **Verify the newest bar is actually current** before publishing. `scripts/chart_data.py` prints
+  the newest bar date and warns when it is more than a few days old (`--stale-after`); a stale
+  newest bar means the *feed* is the problem, not the stock. Do not publish around it silently.
+- **If a source fails, say so in the report** and drop down the ladder in the data guide. Never
+  fill a gap with a remembered or previously-fetched number.
+
 ### 1 — Resolve the ticker
 `search_contracts` → exact symbol, primary listing; keep `contract_id`, company name, and the
 stock's sector/industry group (`get_company_themes`). If the user names a company rather than a
@@ -153,6 +175,9 @@ verdict with the defensive rule (cut losses 7-8%).
   - `securities-filings-lookup` -> https://github.com/thewongdirection/securities-filings-lookup
 
 ## Guardrails
+- **Fresh data every run — no cached grades.** Re-pull price, volume and fundamentals on every
+  invocation and rebuild the report from them; never reuse a prior run's figures or output file,
+  and never answer a follow-up from the previous verdict. See step 0.
 - **Read-only, market data only.** IBKR tools allowed: `search_contracts`, `get_price_snapshot`,
   `get_price_history`, `get_company_themes`, `search_investment_topics`, `get_theme_details`.
   **Never** call order tools or account tools (balances, positions, orders, trades, summary, PA
