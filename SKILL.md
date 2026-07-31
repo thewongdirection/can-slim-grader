@@ -195,6 +195,47 @@ bases/pivots, relative strength, new highs, volume/accumulation, leadership, spo
 direction. No generic macro takes, analyst targets, or "good company" vibes. Always pair the
 verdict with the defensive rule (cut losses 7-8%).
 
+## Changing this skill? Keep `can-slim-recommend` at parity
+
+`can-slim-recommend` is not a separate implementation — it is the same methodology aimed at a
+different question. Two files are shared **verbatim** between the repos, and the rules in the rest
+of this document are meant to hold on both sides:
+
+| Shared verbatim | Why it must match |
+|---|---|
+| `references/canslim-methodology.md` | the rule set both skills grade against |
+| `scripts/relative_strength.py` | the RS proxy, % off high, base metrics, breakout volume |
+
+**A change is MATERIAL — and must be ported to the sister skill in the same piece of work —
+whenever it alters what a letter means, what a threshold is, how a number is computed, or how
+fresh the data has to be.** Specifically:
+
+- any threshold, weight, or pass/partial/fail rule, **including what counts as a pivot or a sound
+  base**;
+- the maths in `relative_strength.py` (RS windows and weights, base metrics, the volume basis);
+- data-sourcing policy — the source ladder, the freshness requirement, staleness limits;
+- guardrails — the read-only tool list, what may never be displayed.
+
+**Not material (grader-only — do not port):** the single-ticker HTML report and its self-audit,
+`scripts/chart_data.py`, the BUY-RANGE / WATCH / AVOID verdict labels, and anything else that only
+makes sense for one-ticker-in / one-verdict-out. The screener has its own output format; port the
+substance, adapt the framing.
+
+### Procedure
+1. **Before committing, run `python scripts/check_parity.py`.** It hashes the shared files against
+   `parity-manifest.json` and names exactly what drifted.
+2. If a shared file changed — or if you changed a rule in the material list above, **which the
+   script cannot detect** — port the same change to
+   **https://github.com/thewongdirection/can-slim-recommend**. Add the repo to the session first
+   if it isn't there (`add_repo`). Adapt only the wording (a ranked list rather than one verdict),
+   never the substance.
+3. Re-run the check and `python scripts/check_parity.py --update` in the same commit, so the
+   recorded hashes describe what was actually synced.
+4. **If you cannot reach the sister repo, say so in your reply and in the commit message, and
+   leave the manifest un-updated** so the drift stays visible. Never land a material change
+   silently on one side: a screener and a grader that disagree about the rules are worse than
+   either alone.
+
 ## Sister & companion skills
 - **`can-slim-recommend` (sister skill)** — the market-wide screener (a ranked list of CAN SLIM
   ideas) built on the same methodology and RS script. Use it when the user wants ideas/a list
@@ -236,6 +277,9 @@ verdict with the defensive rule (cut losses 7-8%).
   EMA/SMA + 50-day average volume) from daily OHLCV bars. Accepts IBKR, row-array, or
   Polygon/Massive shapes; computes the averages over the full history and emits only the
   display window. Pure standard library.
+- `scripts/check_parity.py` + `parity-manifest.json` — hashes the files shared verbatim with
+  `can-slim-recommend` and reports drift since the last recorded sync. Run before committing any
+  change to this skill; byte-level only, so material rule changes still need porting by hand.
 - `scripts/html_to_pdf.py` — **optional** helper that exports the filled HTML dashboard to a PDF
   for sharing/printing (not the default deliverable). Multi-engine (headless Chrome/Chromium/Edge
   with header/footer suppressed → Playwright → WeasyPrint → wkhtmltopdf); prints the engine used.

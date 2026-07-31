@@ -61,6 +61,12 @@ tomorrow (or ten minutes later) re-measures rather than repeating. For the ticke
   into the report's `priceChart` block: candles for the display window plus the 50/200-day
   EMA (or SMA) computed over the *full* history and the 50-day average volume. Standard
   library only.
+- `scripts/check_parity.py` + `parity-manifest.json` — guards the shared methodology. This skill and
+  `can-slim-recommend` share `references/canslim-methodology.md` and `scripts/relative_strength.py`
+  **verbatim**, so any change to a threshold, a scoring rule, the pivot definition, the RS maths or
+  the data-freshness policy is *material* and must be ported to the sister skill in the same piece
+  of work. The script reports byte-level drift; see "Keep `can-slim-recommend` at parity" in
+  `SKILL.md` for the full rule.
 - `scripts/html_to_pdf.py` — **optional** PDF export for the dashboard (headless
   Chrome/Chromium/Edge → Playwright → WeasyPrint → wkhtmltopdf).
 - `assets/evaluation_template.html` — the **default deliverable**: a self-contained, theme-aware

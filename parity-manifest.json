@@ -1,0 +1,8 @@
+{
+  "sister": "https://github.com/thewongdirection/can-slim-recommend",
+  "note": "sha256 of the files shared verbatim with can-slim-recommend. Update ONLY in the same commit that ports the change to the sister repo.",
+  "files": {
+    "references/canslim-methodology.md": "7786ec292a224ec90199c4a3ab40ce5eec4dd75ffedc124d0764649a0dab86fa",
+    "scripts/relative_strength.py": "05a81e31642a77c6ccd4fe7a4d10cf938586d376c0cf4ace3cc14991db3edf93"
+  }
+}
