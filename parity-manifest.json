@@ -4,5 +4,22 @@
   "files": {
     "references/canslim-methodology.md": "7786ec292a224ec90199c4a3ab40ce5eec4dd75ffedc124d0764649a0dab86fa",
     "scripts/relative_strength.py": "05a81e31642a77c6ccd4fe7a4d10cf938586d376c0cf4ace3cc14991db3edf93"
-  }
+  },
+  "pending_port": [
+    {
+      "commit": "0a902a6",
+      "summary": "Require a fresh data pull on every run",
+      "why": "Freshness policy is material: a screener ranking ideas off cached bars has the same defect as a grader. Port step 0, the data-guide freshness section, and the newest-bar / --stale-after check in chart_data.py (or its screener equivalent)."
+    },
+    {
+      "commit": "e5a4425",
+      "summary": "Grades must follow their evidence; strict pivot definition",
+      "why": "Both the pass/partial/fail discipline and the pivot rule (sound base AND new-high ground; no pivot >~10% below the 52-week high) are scoring rules the screener applies too."
+    },
+    {
+      "commit": "f0c1c55",
+      "summary": "50-day average volume excludes the latest bar",
+      "why": "Only the chart_data side changed here, but the screener must use the same volume basis as relative_strength.breakout_volume wherever it reports a volume surge."
+    }
+  ]
 }
