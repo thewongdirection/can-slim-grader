@@ -3,14 +3,16 @@
 chart_data.py - build the `priceChart` block for the CAN SLIM dashboard.
 
 Turns daily OHLCV bars into the exact object `assets/evaluation_template.html` expects:
-daily candles for the display window (default the last ~3 months = 63 sessions) plus the
+daily candles for the display window (default the last 300 sessions ~= 14 months) plus the
 50- and 200-period moving averages and the 50-day average volume.
 
 WHY A SCRIPT: the 200-day EMA needs ~200 sessions of history BEFORE the first visible
-candle. Feed this the longest daily series you can pull (>= 1 year, ideally 2); it computes
-the averages across the whole series and then slices only the display window, so CONFIG
-stays small and the moving averages are correctly seeded rather than restarted at the left
-edge of the chart.
+candle - so a 300-session window wants ~500 daily bars in, and the 200-day line only means
+something once it spans most of what you see. Feed this the longest daily series you can
+pull (>= 500 bars, i.e. IBKR period=TWO_YEARS; FIVE_YEARS for margin); it computes the
+averages across the whole series and then slices only the display window, so CONFIG stays
+small and the moving averages are correctly seeded rather than restarted at the left edge
+of the chart.
 
 INPUT (auto-detected, file argument or stdin):
   1. IBKR `get_price_history` response - parallel arrays:
@@ -25,8 +27,8 @@ OUTPUT: JSON on stdout - paste it as CONFIG.priceChart in the filled dashboard. 
 annotates the chart) when the newest bar is stale - bars must be re-pulled every run, never reused.
 
 Usage:
-  python chart_data.py nvda_daily.json                     # last 63 sessions, 50/200 EMA
-  python chart_data.py nvda_daily.json --window 63 --js    # ready-to-paste "priceChart: {...},"
+  python chart_data.py nvda_daily.json                     # last 300 sessions, 50/200 EMA
+  python chart_data.py nvda_daily.json --window 300 --js   # ready-to-paste "priceChart: {...},"
   python chart_data.py bars.json --type sma                # 50/200 simple MAs instead
   python chart_data.py bars.json --marker 178:Pivot:accent --marker 164:"Stop -8%":fail
   cat bars.json | python chart_data.py --out chart.json
@@ -38,7 +40,8 @@ import datetime as _dt
 import json
 import sys
 
-MONTH_SESSIONS = 21  # ~21 trading sessions per month; 3 months ~= 63
+MONTH_SESSIONS = 21   # ~21 trading sessions per month
+DEFAULT_WINDOW = 300  # sessions on display (~14 months) - long enough for the 200-day EMA to mean something
 
 
 # --------------------------------------------------------------------------- loading
@@ -198,9 +201,10 @@ def build(rows, window, ma_type, periods, markers, label, stale_after=4):
         warnings.append("only %d daily bars supplied - the %d-period average never seeds and will "
                         "not be drawn; pull at least %d." % (len(rows), slow, slow + window))
     elif history < slow:
-        warnings.append("only %d bars precede the display window, so the %d-period average is still "
-                        "converging at the left edge; pull ~%d bars (2 years) for a fully settled line."
-                        % (history, slow, slow + window))
+        warnings.append("only %d bars precede the %d-session display window, so the %d-period average "
+                        "starts partway across the chart; pull ~%d bars for a line that spans it "
+                        "(period=TWO_YEARS gives ~500, FIVE_YEARS more)."
+                        % (history, len(win), slow, slow + window))
     if len(win) < window:
         warnings.append("input has %d bars; the window was trimmed to that." % len(win))
 
@@ -234,8 +238,8 @@ def parse_marker(s):
 def main():
     ap = argparse.ArgumentParser(description="Build the dashboard's priceChart block from daily OHLCV bars.")
     ap.add_argument("input", nargs="?", help="JSON file of daily bars (default: stdin)")
-    ap.add_argument("--window", type=int, default=3 * MONTH_SESSIONS,
-                    help="sessions to display (default 63 ~= 3 months)")
+    ap.add_argument("--window", type=int, default=DEFAULT_WINDOW,
+                    help="sessions to display (default %d ~= 14 months)" % DEFAULT_WINDOW)
     ap.add_argument("--months", type=int, help="display window in months (overrides --window)")
     ap.add_argument("--type", choices=("ema", "sma"), default="ema", help="moving-average type (default ema)")
     ap.add_argument("--periods", default="50,200", help="fast,slow MA periods (default 50,200)")
@@ -262,7 +266,9 @@ def main():
         data = json.load(sys.stdin)
 
     window = args.months * MONTH_SESSIONS if args.months else args.window
-    label = args.label or ("last %d months" % args.months if args.months else "last 3 months")
+    # No --label and no --months: let build() name the window from the bars it actually emitted,
+    # so a trimmed window never claims more history than the chart shows.
+    label = args.label or ("last %d months" % args.months if args.months else None)
     rows = load_rows(data)
     chart, warnings = build(rows, max(5, window), args.type, periods, args.marker, label,
                             stale_after=args.stale_after)

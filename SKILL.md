@@ -3,7 +3,7 @@ name: can-slim-grader
 description: >-
   Grade a single specified stock ticker against the CAN SLIM growth-investing model and return a
   letter-by-letter (C-A-N-S-L-I-M) scorecard with a BUY-RANGE / WATCH / AVOID verdict, as a
-  self-contained HTML dashboard (optional PDF export). Use whenever the user wants to judge the
+  light-themed PDF dashboard (the HTML version on request). Use whenever the user wants to judge the
   QUALITY of one stock or whether a specific ticker is any good — "evaluate NVDA", "is TSLA a good
   stock", "rate AAPL", "does PLTR pass CAN SLIM", "grade this stock", "should I be interested in
   MSFT", "is CRWD a buy", "how strong is <company>". Works for any publicly traded ticker; pulls
@@ -24,10 +24,11 @@ lens** — one ticker in, one verdict out. They share `references/canslim-method
 
 Takes **one ticker** and grades it, letter by letter, against the seven CAN SLIM criteria,
 then returns a **BUY-RANGE / WATCH / AVOID** verdict with the evidence, a chart-position read
-(including a **daily candlestick chart** of the last ~3 months with the 50/200-day EMA and
-volume), and — if it's actionable — the pivot buy point and the 7-8% loss-cutting stop. Output is a
-self-contained **HTML dashboard** by default — a single file you open straight in the browser
-(theme-aware, dark by default) — with an **optional PDF export** for sharing/printing.
+(including a **daily candlestick chart** of the last **300 sessions (~14 months)** with the
+50/200-day EMA and volume), and — if it's actionable — the pivot buy point and the 7-8%
+loss-cutting stop. Output is a **PDF dashboard by default** — a light-themed, print-ready report
+rendered from a self-contained HTML working file — and the **HTML itself only if the user asks**
+(same report, plus the chart's hover readout).
 **Decision support, not advice, and never an order.**
 
 ## What CAN SLIM is (the standard this skill grades against)
@@ -95,9 +96,10 @@ graded letters.
 
 ### 3 — Gather the stock's data
 Per `data-and-scoring-guide.md`: `get_price_snapshot` (52-week high/low, price, YTD) and
-`get_price_history` (weekly ~1-2 yr for base shape; **daily `period=TWO_YEARS`** — 6 months
-covers breakout volume & RS, but the report's chart needs ~200 sessions of history before the
-window to seed the 200-day EMA, so pull the long daily series once and use it for both). Run
+`get_price_history` (weekly ~1-2 yr for base shape; **daily `period=TWO_YEARS`** ≈ 500 bars —
+6 months covers breakout volume & RS, but the report's chart displays 300 sessions and needs
+~200 more before that window to seed the 200-day EMA, so pull the long daily series once and use
+it for both; `period=FIVE_YEARS` if you want margin). Run
 `scripts/relative_strength.py` on the ticker's bars + SPY's bars for the RS proxy, % off
 52-week high, base depth/length, and breakout volume, and `scripts/chart_data.py` on the same
 daily bars for the report's candlestick chart. Then gather fundamentals (C, A, N, I) from
@@ -153,7 +155,7 @@ has no buy point, and the honest entry is **"None now" plus the condition that w
   or is a laggard near lows. Name the failing letters. Be explicit that high RS alone is not
   enough without earnings, and that a beaten-down "cheap" stock is a laggard the method avoids.
 
-### 6 — Deliver an HTML dashboard (default)
+### 6 — Deliver a PDF dashboard (default)
 1. **Fill the report.** Copy `assets/evaluation_template.html` to `<TICKER>-canslim.html` and
    fill the `CONFIG` object (the only thing you edit) — header (ticker/company/price/as-of),
    `verdict` (label + tone + pass-weighted score /7 + one-line summary + buy point/stop), the
@@ -167,26 +169,33 @@ has no buy point, and the honest entry is **"None now" plus the condition that w
    avg $ volume, next earnings — **reference only, not a CAN SLIM input**; leave empty to
    hide), the `buyPlan` (pivot, 7-8% stop, profit-taking, sell signals to watch),
    disclaimer and sources.
-1b. **Build the daily chart** — candlesticks + 50/200-day EMA + volume for the last ~3 months.
-   Never hand-transcribe bars; pipe the daily OHLCV you already pulled through the script:
-   `python scripts/chart_data.py <bars>.json --window 63 --marker <pivot>:Pivot:accent --js`
+1b. **Build the daily chart** — candlesticks + 50/200-day EMA + volume for the **last 300
+   sessions (~14 months)**, the window that makes a 200-day EMA meaningful. Never hand-transcribe
+   bars; pipe the daily OHLCV you already pulled through the script:
+   `python scripts/chart_data.py <bars>.json --window 300 --marker <pivot>:Pivot:accent --js`
    (it reads IBKR `get_price_history` responses, `[t,o,h,l,c,v]` rows, or Polygon/Massive
-   `/v2/aggs` results) and paste its output as `CONFIG.priceChart`. **Feed it ≥1 year of daily
-   bars, ideally 2** (`period=TWO_YEARS`, `step=ONE_DAY`) — the 200-day EMA needs ~200 sessions
-   *before* the first visible candle, and the script warns and annotates the chart when the
-   history is too thin. Add `--marker` lines for the pivot and the 7-8% stop so the chart shows
-   the same prices as the entry/stop band. If price data is unavailable, leave `bars` empty —
-   the chart section hides itself — and say the chart was omitted for lack of data.
-2. **Deliver the HTML dashboard — this is the default deliverable.** The filled
-   `<TICKER>-canslim.html` is fully self-contained (no external assets), theme-aware, and dark
-   by default. Give the user the file and **open it in the browser** for them (e.g. launch
-   Chrome/the default browser on the file path, or present it) so they can view it directly. The
-   dashboard renders itself from `CONFIG`; do not hand-edit the DOM.
-3. **Optional PDF export.** If the user wants a shareable/printable copy, run
+   `/v2/aggs` results) and paste its output as `CONFIG.priceChart`. **Feed it ≥500 daily bars**
+   (`period=TWO_YEARS`, `step=ONE_DAY`; `period=FIVE_YEARS` for margin) — the 200-day EMA needs
+   ~200 sessions *before* the first visible candle, on top of the 300 displayed, and the script
+   warns and annotates the chart when the history is too thin. Add `--marker` lines for the pivot
+   and the 7-8% stop so the chart shows the same prices as the entry/stop band. If price data is
+   unavailable, leave `bars` empty — the chart section hides itself — and say the chart was
+   omitted for lack of data.
+2. **Render the PDF — this is the default deliverable.** The filled `<TICKER>-canslim.html` is the
+   working file (self-contained, light-themed, print-optimized); the user gets the PDF:
    `python scripts/html_to_pdf.py <TICKER>-canslim.html <TICKER>-canslim.pdf` (headless
-   Chrome/Chromium/Edge → Playwright → WeasyPrint → wkhtmltopdf; it prints the engine used). The
-   template's print CSS keeps the dark background and colored badges/chips. This is a secondary
-   convenience, not the default — don't block on it if no PDF engine is present.
+   Chrome/Chromium/Edge → Playwright → WeasyPrint → wkhtmltopdf; it prints the engine used).
+   **Re-read `CONFIG` against the self-audit rules before you export** — grade vs the evidence
+   printed beside it, the score arithmetic, the pivot against `high52`, the 7-8% stop — because
+   the PDF freezes whatever the page says and nobody will see the red banner in time. If you can
+   view the rendered page, confirm it is absent. Hand over the PDF. If no PDF engine is available,
+   say so and hand over the HTML instead — never block the grade on the export.
+3. **HTML on request only.** Give the `<TICKER>-canslim.html` file (and/or open it in the browser)
+   when the user asks for the HTML, an interactive version, or the chart's hover readout — it is
+   the same report with a crosshair readout the PDF cannot carry. It renders itself from `CONFIG`;
+   do not hand-edit the DOM. A dark rendering is likewise on request: set
+   `<html lang="en" data-theme="dark">` in the filled file (light is the default, on screen and
+   in print).
 4. Keep the chat reply short: the verdict, the two or three letters that drove it, and the buy
    point/stop if actionable.
 
@@ -276,19 +285,21 @@ substance, adapt the framing.
 - `scripts/chart_data.py` — builds the report's `priceChart` block (daily candles + 50/200-day
   EMA/SMA + 50-day average volume) from daily OHLCV bars. Accepts IBKR, row-array, or
   Polygon/Massive shapes; computes the averages over the full history and emits only the
-  display window. Pure standard library.
+  display window (default 300 sessions, so feed it ~500 bars). Pure standard library.
 - `scripts/check_parity.py` + `parity-manifest.json` — hashes the files shared verbatim with
   `can-slim-recommend` and reports drift since the last recorded sync. Run before committing any
   change to this skill; byte-level only, so material rule changes still need porting by hand.
-- `scripts/html_to_pdf.py` — **optional** helper that exports the filled HTML dashboard to a PDF
-  for sharing/printing (not the default deliverable). Multi-engine (headless Chrome/Chromium/Edge
-  with header/footer suppressed → Playwright → WeasyPrint → wkhtmltopdf); prints the engine used.
-  Pure standard library (uses whatever browser/lib is present).
-- `assets/evaluation_template.html` — the **default deliverable**: a self-contained, theme-aware
-  (dark by default) single-stock CAN SLIM dashboard you open straight in the browser, driven by a
-  `CONFIG` object (verdict badge, the seven-letter scorecard with evidence, the daily
-  candlestick chart, technicals, and the buy/sell plan). **It audits itself on render** and
-  banners any grade that contradicts its own evidence, a pivot that isn't in new-high ground, a
-  score that doesn't add up, or a stop that isn't 7-8%. The chart is hand-rolled inline SVG —
-  no chart library, no network calls. Pure-ASCII source; print CSS keeps the dark background and
-  colored badges/chips for the optional PDF export.
+- `scripts/html_to_pdf.py` — renders the filled HTML into the **PDF that is the default
+  deliverable**. Multi-engine (headless Chrome/Chromium/Edge with header/footer suppressed →
+  Playwright → WeasyPrint → wkhtmltopdf); prints the engine used. Pure standard library (uses
+  whatever browser/lib is present).
+- `assets/evaluation_template.html` — the report itself: a self-contained, **light-themed**
+  single-stock CAN SLIM dashboard driven by a `CONFIG` object (verdict badge, the seven-letter
+  scorecard with evidence, the daily candlestick chart, technicals, and the buy/sell plan). It is
+  the working file behind the PDF, and the deliverable itself when the user asks for the HTML;
+  `data-theme="dark"` on `<html>` flips it to the dark palette on request. **It audits itself on
+  render** and banners any grade that contradicts its own evidence, a pivot that isn't in
+  new-high ground, a score that doesn't add up, or a stop that isn't 7-8%. The chart is
+  hand-rolled inline SVG — no chart library, no network calls — with candle/EMA colours picked
+  for contrast on white. Pure-ASCII source; print CSS is A4/Letter with
+  `print-color-adjust:exact` so badges and chips survive the export.

@@ -2,21 +2,26 @@
   can-slim-grader - single-ticker CAN SLIM scorecard.
 
   HOW TO USE (per run):
-    1. Copy this file to an output file, e.g. <TICKER>-canslim.html
+    1. Copy this file to a working file, e.g. <TICKER>-canslim.html
     2. Fill the CONFIG object below with the evaluation. That is the ONLY thing you edit -
        the page renders itself. Do not hand-edit the DOM.
-    3. Open the file in a browser - this HTML dashboard is the default deliverable (dark by
-       default). Optional: export a PDF with scripts/html_to_pdf.py (print CSS is A4/Letter,
-       keeps the dark background).
+    3. Export the PDF - that is the default deliverable:
+         python scripts/html_to_pdf.py <TICKER>-canslim.html <TICKER>-canslim.pdf
+       The design is LIGHT (white panels on a pale background) so it prints cleanly; print CSS
+       is A4/Letter. Hand over the HTML as well only if the user asks for it - it is the same
+       report plus the hover readout on the chart. A dark rendering is available on request by
+       setting <html lang="en" data-theme="dark">.
 
   THE DAILY CHART (CONFIG.priceChart):
     Build it with scripts/chart_data.py - never hand-transcribe bars:
-      python scripts/chart_data.py <daily-bars>.json --window 63 --marker 178:Pivot:accent --js
-    Feed that script >= 1 year (ideally 2) of DAILY bars - e.g. IBKR get_price_history
-    step=ONE_DAY period=TWO_YEARS, or Massive /v2/aggs .../range/1/day/... - because the
-    200-day average needs ~200 sessions of history BEFORE the first visible candle. The
-    script computes the averages over the whole series and emits only the ~3-month display
-    window. Paste its output as CONFIG.priceChart. Empty `bars` hides the chart section.
+      python scripts/chart_data.py <daily-bars>.json --window 300 --marker 178:Pivot:accent --js
+    The window is 300 sessions (~14 months) so the 200-day EMA covers most of what you see.
+    Feed that script at least ~500 DAILY bars - e.g. IBKR get_price_history step=ONE_DAY
+    period=TWO_YEARS (period=FIVE_YEARS for margin), or Massive /v2/aggs .../range/1/day/... -
+    because the 200-day average needs ~200 sessions of history BEFORE the first visible candle,
+    on top of the 300 displayed. The script computes the averages over the whole series and
+    emits only the display window. Paste its output as CONFIG.priceChart. Empty `bars` hides
+    the chart section.
 
   SELF-AUDIT:
     On render the page checks CONFIG against itself and prints a red "Report checks" banner at
@@ -49,20 +54,26 @@
 <title>CAN SLIM Evaluation</title>
 <style>
   :root{
-    /* Dark mode is the default design for this report. */
-    --bg:#0f1218; --panel:#171b22; --ink:#e6e9ef; --muted:#9aa4b2; --line:#262c36;
-    --accent:#5b8cff; --accent-soft:#1a2436; --chip:#212733;
-    --pass:#3ecf8e; --pass-bg:#123122; --partial:#e0a94e; --partial-bg:#33280f;
-    --fail:#f2776f; --fail-bg:#3a1512;
-    --ema50:#5b8cff; --ema200:#c084fc;
+    /* Light is the default design for this report - it is what the PDF export prints, so every
+       colour below is chosen to stay legible on white/paper (dark ink, saturated accents). */
+    --bg:#f5f7fa; --panel:#ffffff; --ink:#171b22; --muted:#5a6472; --line:#dbe1e9;
+    --accent:#1552d0; --accent-soft:#eaf1fe; --chip:#eef1f5;
+    --pass:#0b7a43; --pass-bg:#e4f4ea; --partial:#9a5800; --partial-bg:#fcf0da;
+    --fail:#c02a26; --fail-bg:#fdeae8;
+    --ema50:#1552d0; --ema200:#7b2fbe;
+    /* The chart carries its own candle/volume tokens so it can be tuned for contrast on a light
+       background without dragging the pass/partial/fail badge colours along with it. */
+    --cndl-up:#0b8f57; --cndl-dn:#d1392f;
     --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
     --sans:'Inter',system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
   }
-  /* Optional manual light override; dark stays the default even in a light-OS browser. */
-  :root[data-theme="light"]{--bg:#f7f8fa;--panel:#ffffff;--ink:#1a1d24;--muted:#5b6472;--line:#e4e7ec;
-      --accent:#1c64f2;--accent-soft:#e8f0fe;--chip:#eef1f5;
-      --pass:#0f9d58;--pass-bg:#e6f4ea;--partial:#c77700;--partial-bg:#fdf1dd;--fail:#c5221f;--fail-bg:#fce8e6;
-      --ema50:#1c64f2;--ema200:#7c3aed;}
+  /* Optional manual dark override (<html data-theme="dark">); light stays the default even in a
+     dark-OS browser, so the on-screen report and the PDF always match. */
+  :root[data-theme="dark"]{--bg:#0f1218;--panel:#171b22;--ink:#e6e9ef;--muted:#9aa4b2;--line:#262c36;
+      --accent:#5b8cff;--accent-soft:#1a2436;--chip:#212733;
+      --pass:#3ecf8e;--pass-bg:#123122;--partial:#e0a94e;--partial-bg:#33280f;--fail:#f2776f;--fail-bg:#3a1512;
+      --ema50:#5b8cff;--ema200:#c084fc;
+      --cndl-up:#3ecf8e;--cndl-dn:#f2776f;}
 
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.5;-webkit-font-smoothing:antialiased}
@@ -116,23 +127,23 @@
   .chartcard svg{display:block;width:100%;height:auto;touch-action:none}
   .clegend{display:flex;flex-wrap:wrap;gap:6px 16px;align-items:center;font-size:12px;color:var(--muted)}
   .clegend .sw{display:inline-block;width:9px;height:11px;border-radius:2px;margin-right:5px;vertical-align:-1px}
-  .clegend .sw.pc-up{background:var(--pass)} .clegend .sw.pc-dn{background:var(--fail)}
+  .clegend .sw.pc-up{background:var(--cndl-up)} .clegend .sw.pc-dn{background:var(--cndl-dn)}
   .clegend .ln{display:inline-block;width:16px;border-top:2px solid;margin-right:5px;vertical-align:4px}
   .clegend b{color:var(--ink);font-family:var(--mono);font-weight:700}
   .readout{font-family:var(--mono);font-size:12px;color:var(--ink);margin:7px 0 2px;min-height:16px;
            overflow-x:auto;white-space:nowrap;scrollbar-width:none}
   .readout::-webkit-scrollbar{display:none}
-  .readout .k{color:var(--muted)} .readout .up{color:var(--pass)} .readout .dn{color:var(--fail)}
+  .readout .k{color:var(--muted)} .readout .up{color:var(--cndl-up)} .readout .dn{color:var(--cndl-dn)}
   .cnote{font-size:11.5px;color:var(--muted);margin-top:6px}
   .pc-grid{stroke:var(--line);stroke-width:1}
   .pc-ax{fill:var(--muted);font-family:var(--mono);font-size:11px}
-  .pc-up{fill:var(--pass);stroke:var(--pass);stroke-width:1}
-  .pc-dn{fill:var(--fail);stroke:var(--fail);stroke-width:1}
-  .pc-vup{fill:var(--pass);opacity:.5} .pc-vdn{fill:var(--fail);opacity:.5}
-  .pc-ma1{fill:none;stroke:var(--ema50);stroke-width:1.8;stroke-linejoin:round}
-  .pc-ma2{fill:none;stroke:var(--ema200);stroke-width:1.8;stroke-linejoin:round}
+  .pc-up{fill:var(--cndl-up);stroke:var(--cndl-up);stroke-width:1}
+  .pc-dn{fill:var(--cndl-dn);stroke:var(--cndl-dn);stroke-width:1}
+  .pc-vup{fill:var(--cndl-up);opacity:.6} .pc-vdn{fill:var(--cndl-dn);opacity:.6}
+  .pc-ma1{fill:none;stroke:var(--ema50);stroke-width:2;stroke-linejoin:round}
+  .pc-ma2{fill:none;stroke:var(--ema200);stroke-width:2;stroke-linejoin:round}
   .pc-avg{stroke:var(--muted);stroke-width:1;stroke-dasharray:4 3;opacity:.85}
-  .pc-mark{stroke-width:1.2;stroke-dasharray:5 4}
+  .pc-mark{stroke-width:1.4;stroke-dasharray:5 4}
   .pc-mark.accent{stroke:var(--accent)} .pc-mark.pass{stroke:var(--pass)}
   .pc-mark.fail{stroke:var(--fail)} .pc-mark.partial{stroke:var(--partial)}
   .pc-marktx{font-family:var(--mono);font-size:10.5px}
@@ -153,11 +164,14 @@
 
   @media print{
     *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
-    body{background:var(--bg)}
+    body{background:var(--bg)}   /* light by default, so the PDF matches the screen and prints clean */
     .wrap{max-width:none;padding:0}
     .row,.verdict,.stat,.callout,.chartcard{break-inside:avoid}
     a{color:inherit;text-decoration:none}
     .pc-cross{display:none}
+    .hoveronly{display:none}   /* the crosshair readout is screen-only; the PDF has no hover */
+    /* on screen the readout scrolls sideways; on paper there is nowhere to scroll, so let it wrap */
+    .readout{white-space:normal;overflow:visible}
     @page{margin:12mm}
   }
 </style>
@@ -252,17 +266,19 @@ const CONFIG = {
     //   read:"Latest quarter EPS +32% / sales +35% and accelerating - clears the bar." },
   ],
 
-  // Daily candlestick chart - candles + 50/200-day EMA + volume, last ~3 months.
+  // Daily candlestick chart - candles + 50/200-day EMA + volume, last 300 sessions (~14 months).
   // BUILD IT WITH THE SCRIPT, don't hand-transcribe bars:
-  //   python scripts/chart_data.py <daily-bars>.json --window 63 --marker 178:Pivot:accent --js
-  // Feed that script the LONGEST daily series you can pull (>= 1 year, ideally 2 - e.g. IBKR
-  // get_price_history step=ONE_DAY period=TWO_YEARS). It computes the moving averages over the
-  // whole history and emits only the display window, so the 200-day line is properly seeded
-  // instead of restarting at the left edge of the chart.
+  //   python scripts/chart_data.py <daily-bars>.json --window 300 --marker 178:Pivot:accent --js
+  // Feed that script the LONGEST daily series you can pull - at least ~500 bars (IBKR
+  // get_price_history step=ONE_DAY period=TWO_YEARS), because a 300-session window plus a
+  // 200-day EMA needs 500 sessions before the line is fully seeded; period=FIVE_YEARS gives it
+  // room to spare. The script computes the moving averages over the whole history and emits only
+  // the display window, so the 200-day line is properly seeded instead of restarting at the left
+  // edge of the chart.
   // Leave `bars` empty to hide the entire chart section.
   priceChart: {
-    windowLabel: "last 3 months",     // shown next to the section title
-    window: 63,                       // sessions to display if `bars` is longer (63 ~= 3 months)
+    windowLabel: "last 300 sessions", // shown next to the section title
+    window: 300,                      // sessions to display if `bars` is longer (300 ~= 14 months)
     bars: [],                         // [ "YYYY-MM-DD", open, high, low, close, volume ], oldest first
     ema50: [],                        // aligned 1:1 with `bars`, null before seeding; omit to compute from bars
     ema200: [],
@@ -379,7 +395,7 @@ $("letters").innerHTML = (CONFIG.letters||[]).map(L=>{
   let ma1 = fitted(pc.ema50)  || ema(closes,50);
   let ma2 = fitted(pc.ema200) || ema(closes,200);
 
-  const win = Math.max(5, +pc.window || 63);
+  const win = Math.max(5, +pc.window || 300);
   const from = Math.max(0, all.length - win);
   const rows = all.slice(from); ma1 = ma1.slice(from); ma2 = ma2.slice(from);
   const n = rows.length;
@@ -432,10 +448,17 @@ $("letters").innerHTML = (CONFIG.letters||[]).map(L=>{
     s.push('<line class="pc-grid" x1="'+PADL+'" y1="'+y+'" x2="'+(W-PADR)+'" y2="'+y+'"/>');
     s.push('<text class="pc-ax" x="'+(W-PADR+7)+'" y="'+n2(y+3.5)+'">'+fmtP(t)+'</text>'); });
 
+  // A month gridline at every month start; the label only where it fits beside the last one it
+  // drew, so a long window (300 sessions ~ 14 months) thins instead of overprinting itself.
+  // 6.6 units per character is the width of the 11px monospace axis font.
+  let lastLabX = -1e9, lastLabW = 0;
   rows.forEach((r,i)=>{ const m=r.d.slice(5,7);
     if (!m || (i>0 && m===rows[i-1].d.slice(5,7))) return;
     const x=n2(cx(i)), lbl=(MON[+m-1]||r.d.slice(0,7))+(m==="01"?" "+r.d.slice(0,4):"");
     s.push('<line class="pc-grid" x1="'+x+'" y1="'+priceTop+'" x2="'+x+'" y2="'+volBot+'" opacity=".5"/>');
+    const w = lbl.length*6.6;
+    if (x - lastLabX < (lastLabW + w)/2 + 8) return;
+    lastLabX = x; lastLabW = w;
     s.push('<text class="pc-ax" x="'+x+'" y="'+xLabY+'" text-anchor="middle">'+lbl+'</text>'); });
 
   const path = arr => { let d="", pen=false;
@@ -461,10 +484,14 @@ $("letters").innerHTML = (CONFIG.letters||[]).map(L=>{
   rows.forEach((r,i)=>{ const y=n2(yV(r.v));
     s.push('<rect class="'+(r.c>=r.o?"pc-vup":"pc-vdn")+'" x="'+n2(cx(i)-bodyW/2)+'" y="'+y+
            '" width="'+n2(bodyW)+'" height="'+n2(Math.max(0.6,volBot-y))+'"/>'); });
+  let avgLabY = null;
   if (avgVol>0 && avgVol<=vmax){ const y=n2(yV(avgVol));
     s.push('<line class="pc-avg" x1="'+PADL+'" y1="'+y+'" x2="'+(W-PADR)+'" y2="'+y+'"/>');
-    s.push('<text class="pc-ax" x="'+(W-PADR+7)+'" y="'+n2(y+3.5)+'">'+fmtV(avgVol)+'</text>'); }
-  s.push('<text class="pc-ax" x="'+(W-PADR+7)+'" y="'+(volTop+9)+'">'+fmtV(vmax)+'</text>');
+    s.push('<text class="pc-ax" x="'+(W-PADR+7)+'" y="'+n2(y+3.5)+'">'+fmtV(avgVol)+'</text>');
+    avgLabY = y+3.5; }
+  // Skip the peak-volume label when the average line has already claimed that spot.
+  if (avgLabY == null || Math.abs(avgLabY-(volTop+9)) > 11)
+    s.push('<text class="pc-ax" x="'+(W-PADR+7)+'" y="'+(volTop+9)+'">'+fmtV(vmax)+'</text>');
   s.push('<line class="pc-cross" id="pc-cross" x1="0" y1="'+priceTop+'" x2="0" y2="'+volBot+'"/>');
   s.push('</svg>');
 
@@ -483,8 +510,10 @@ $("letters").innerHTML = (CONFIG.letters||[]).map(L=>{
     s.join('')+
     (pc.note?'<div class="cnote">'+esc(pc.note)+'</div>':'');
 
-  if (sub) sub.innerHTML = '&mdash; '+esc(pc.windowLabel||("last "+n+" sessions"))+' ('+esc(first.d)+
-    ' to '+esc(last.d)+'), '+n+' sessions &middot; hover for values';
+  const wl = pc.windowLabel || ("last "+n+" sessions");
+  if (sub) sub.innerHTML = '&mdash; '+esc(wl)+' ('+esc(first.d)+' to '+esc(last.d)+')'+
+    (wl.indexOf(String(n)) < 0 ? ', '+n+' sessions' : '')+   // don't repeat a count the label already gives
+    '<span class="hoveronly"> &middot; hover for values</span>';
 
   const svgEl = host.querySelector("svg"), cross = host.querySelector("#pc-cross"),
         read = host.querySelector("#pc-readout");

@@ -2,9 +2,9 @@
 
 A Claude skill that **evaluates a single stock ticker against the CAN SLIM growth-investing
 model** and returns a structured, letter-by-letter scorecard with a **BUY-RANGE / WATCH /
-AVOID** verdict — delivered as a self-contained **HTML dashboard by default** (theme-aware, dark
-by default) that you open straight in the browser, with an **optional PDF export** for
-sharing/printing.
+AVOID** verdict — delivered as a **light-themed PDF dashboard by default**, rendered from a
+self-contained HTML working file. Ask for the **HTML** and you get that too: the same report plus
+a hover readout on the chart (and a `data-theme="dark"` switch if you prefer dark).
 
 It activates whenever you want to judge the *quality* of one stock — *"evaluate NVDA"*, *"is
 TSLA a good stock"*, *"rate AAPL"*, *"does PLTR pass CAN SLIM"*, *"how does AMD score"*, *"is
@@ -25,8 +25,9 @@ tomorrow (or ten minutes later) re-measures rather than repeating. For the ticke
 1. Assesses **market direction (M)** first (the gate).
 2. Pulls the stock's **live price/volume/52-week stats** (IBKR) and computes relative strength,
    % off 52-week high, base shape, and breakout volume — and draws a **daily candlestick chart**
-   of the last ~3 months with the **50- and 200-day EMA**, a **volume pane** (with the 50-day
-   average line), and dashed markers at the pivot and stop.
+   of the last **300 sessions (~14 months)** with the **50- and 200-day EMA**, a **volume pane**
+   (with the 50-day average line), and dashed markers at the pivot and stop. The long window is
+   deliberate: a 200-day EMA on a three-month chart is a line with almost no chart under it.
 3. Gathers **fundamentals** (quarterly & annual earnings, sales, ROE, ownership) from connected
    financial-data sources (Daloopa / bigdata.com / LSEG / Financial Modeling Prep / SEC EDGAR)
    or the web.
@@ -67,19 +68,21 @@ tomorrow (or ten minutes later) re-measures rather than repeating. For the ticke
   the data-freshness policy is *material* and must be ported to the sister skill in the same piece
   of work. The script reports byte-level drift; see "Keep `can-slim-recommend` at parity" in
   `SKILL.md` for the full rule.
-- `scripts/html_to_pdf.py` — **optional** PDF export for the dashboard (headless
+- `scripts/html_to_pdf.py` — renders the **default deliverable**, the PDF (headless
   Chrome/Chromium/Edge → Playwright → WeasyPrint → wkhtmltopdf).
-- `assets/evaluation_template.html` — the **default deliverable**: a self-contained, theme-aware
-  (dark by default) single-stock CAN SLIM dashboard you open in the browser, driven by a `CONFIG`
-  object. The candlestick chart is hand-rolled inline SVG — no chart library and no network
-  calls, so the file stays a single self-contained page. Pure-ASCII source.
+- `assets/evaluation_template.html` — the report: a self-contained, **light-themed** single-stock
+  CAN SLIM dashboard driven by a `CONFIG` object. It is the working file the PDF is printed from,
+  and the deliverable itself when you ask for the HTML; `data-theme="dark"` flips it to a dark
+  palette. The candlestick chart is hand-rolled inline SVG — no chart library and no network
+  calls, so the file stays a single self-contained page — with candle, EMA and volume colours
+  chosen to read clearly on white. Pure-ASCII source.
 
 ## Requirements
 - IBKR MCP connector (read-only market data; never trades).
 - Fundamental-data connectors and/or web search in the session.
-- A modern browser to view the HTML dashboard (the default output). A PDF engine is only needed
-  for the **optional** PDF export — headless **Chrome/Chromium/Edge** (preferred), or
-  `pip install playwright weasyprint`, or `wkhtmltopdf`.
+- A PDF engine for the default output — headless **Chrome/Chromium/Edge** (preferred), or
+  `pip install playwright weasyprint`, or `wkhtmltopdf`. Without one the skill falls back to
+  handing you the HTML and says so. A modern browser to view the HTML version if you ask for it.
 
 ## Disclaimer
 Informational decision support, **not investment advice.** It never places orders and never

@@ -1,17 +1,20 @@
 #!/usr/bin/env python3
 """
-html_to_pdf.py - convert a self-contained CAN SLIM evaluation HTML report to PDF.
+html_to_pdf.py - render the filled CAN SLIM evaluation HTML to PDF.
 
-The evaluation template is print-optimized (A4/Letter, print-color-adjust:exact), so a
-headless-Chrome print reproduces the on-screen report faithfully. This script tries several
-engines so it works across environments, and prints the engine it used.
+The PDF is this skill's DEFAULT deliverable: the filled <TICKER>-canslim.html is the working
+file, and this turns it into the report the user gets. The template is light-themed and
+print-optimized (A4/Letter, print-color-adjust:exact), so a headless-Chrome print reproduces
+the on-screen report faithfully. This script tries several engines so it works across
+environments, and prints the engine it used.
 
 Usage:
     python html_to_pdf.py <input.html> [output.pdf]
 If output is omitted it is the input path with a .pdf extension.
 
 Engine order: headless Chrome/Chromium/Edge (--print-to-pdf) -> Playwright -> WeasyPrint ->
-wkhtmltopdf. Exits non-zero (with guidance) if none is available.
+wkhtmltopdf. Exits non-zero (with guidance) if none is available - in that case hand over the
+HTML instead and say why.
 """
 import os
 import sys
@@ -30,7 +33,13 @@ def find_browser():
         p = shutil.which(name)
         if p:
             return p
-    cands = [
+    cands = []
+    # Agent sandboxes often ship a Playwright-managed Chromium that is not on PATH.
+    pw = os.environ.get("PLAYWRIGHT_BROWSERS_PATH")
+    if pw:
+        cands += [os.path.join(pw, "chromium"),
+                  os.path.join(pw, "chrome-linux", "chrome")]
+    cands += [
         r"C:\Program Files\Google\Chrome\Application\chrome.exe",
         r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
         os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe"),
