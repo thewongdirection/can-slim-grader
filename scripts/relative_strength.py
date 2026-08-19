@@ -19,8 +19,11 @@ INPUT: a JSON file (or stdin) shaped like:
      ...
   ]
 }
-Each bar is [timestamp, open, high, low, close, volume]. `t` may be any monotonic value;
-only ordering is used. Missing `weekly` disables base metrics for that name.
+Each bar is [timestamp, open, high, low, close, volume] OR the dict form {t, o, h, l, c, v}
+that TradingView's `get_ohlcv` and Polygon/Massive `/v2/aggs` return - both are accepted and
+normalized on the way in, so provider output can be dropped straight into this file without
+being reshaped by hand. `t` may be any monotonic value; only ordering is used. Missing
+`weekly` disables base metrics for that name.
 
 OUTPUT: JSON to stdout — per-candidate metrics plus a candidate-set RS rank (1 = strongest).
 
@@ -32,6 +35,24 @@ math below only needs ordered (close, volume) series.
 """
 import json
 import sys
+
+
+def as_row(bar):
+    """Normalize one bar to [t, o, h, l, c, v].
+
+    Providers disagree about the shape: IBKR and this file's own format use positional rows,
+    while TradingView's `get_ohlcv` and Polygon/Massive `/v2/aggs` return {t, o, h, l, c, v}
+    dicts. Accepting both here is what lets a run paste provider output in unedited - and
+    hand-retyping bars is exactly where a grade quietly acquires a typo.
+    """
+    if isinstance(bar, dict):
+        t = bar.get("t", bar.get("time", bar.get("date", bar.get("d"))))
+        return [t, bar.get("o"), bar.get("h"), bar.get("l"), bar.get("c"), bar.get("v", 0)]
+    return bar
+
+
+def normalize(bars):
+    return [as_row(b) for b in (bars or []) if b]
 
 
 def closes(bars):
@@ -123,11 +144,11 @@ def breakout_volume(daily, avg_window=50):
 
 
 def analyze(data):
-    bench = data.get("benchmark", {}).get("daily", [])
+    bench = normalize(data.get("benchmark", {}).get("daily", []))
     out = []
     for cand in data.get("candidates", []):
-        daily = cand.get("daily", [])
-        weekly = cand.get("weekly", [])
+        daily = normalize(cand.get("daily", []))
+        weekly = normalize(cand.get("weekly", []))
         rel, blend = rs_proxy(daily, bench) if bench and daily else ({}, None)
         out.append({
             "symbol": cand.get("symbol"),

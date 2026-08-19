@@ -11,8 +11,9 @@ TSLA a good stock"*, *"rate AAPL"*, *"does PLTR pass CAN SLIM"*, *"how does AMD 
 CRWD a buy"*, *"grade this stock"*.
 
 It is the **sister skill of [`can-slim-recommend`](https://github.com/thewongdirection/can-slim-recommend)** —
-the two are a matched pair on one CAN SLIM methodology (they share the same
-`references/canslim-methodology.md` and `scripts/relative_strength.py`). This one is the
+the two are a matched pair on one CAN SLIM methodology (they share
+`references/canslim-methodology.md` and `scripts/relative_strength.py`, and material rule changes
+are ported between them). This one is the
 single-stock **grading lens** — one ticker in, a CAN SLIM verdict out; `can-slim-recommend` is
 the market-wide screener that returns a ranked *list* of ideas. For a data-rich single-stock
 dashboard, use `ibkr-review-ticker`.
@@ -23,14 +24,17 @@ Every run pulls its own data — prices, volume and fundamentals are re-fetched 
 and the report is rebuilt from them. Nothing is carried over from a previous run, so asking again
 tomorrow (or ten minutes later) re-measures rather than repeating. For the ticker you name it:
 1. Assesses **market direction (M)** first (the gate).
-2. Pulls the stock's **live price/volume/52-week stats** (IBKR) and computes relative strength,
+2. Pulls the stock's **live price/volume/52-week stats** (TradingView `get_ohlcv` +
+   `get_symbol_data`, or IBKR) and computes relative strength,
    % off 52-week high, base shape, and breakout volume — and draws a **daily candlestick chart**
    of the last **300 sessions (~14 months)** with the **50- and 200-day EMA**, a **volume pane**
    (with the 50-day average line), and dashed markers at the pivot and stop. The long window is
    deliberate: a 200-day EMA on a three-month chart is a line with almost no chart under it.
-3. Gathers **fundamentals** (quarterly & annual earnings, sales, ROE, ownership) from connected
-   financial-data sources (Daloopa / bigdata.com / LSEG / Financial Modeling Prep / SEC EDGAR)
-   or the web.
+3. Gathers **fundamentals** (quarterly & annual earnings with YoY growth, street EPS vs
+   consensus, ROE, margins, debt) from **TradingView** by preference — one call each for the
+   quarterly series, the annual series, the earnings history and the TTM ratios — falling back to
+   Daloopa / bigdata.com / LSEG / Massive / FMP / SEC EDGAR or the web. Institutional sponsorship
+   is the one input TradingView does not carry, so that comes from 13F/Form 4 or the web.
 4. **Grades each of C·A·N·S·L·I·M** pass / partial / fail against the method's thresholds, with
    the concrete numbers behind each grade — and the finished report **checks itself**, bannering
    any letter whose grade contradicts the evidence printed beside it, a buy point that isn't in
@@ -57,14 +61,15 @@ tomorrow (or ten minutes later) re-measures rather than repeating. For the ticke
 - `references/data-and-scoring-guide.md` — the single-ticker data-gathering sequence, the
   fundamental source-priority ladder, and the pass/partial/fail scoring rubric + verdict rules.
 - `scripts/relative_strength.py` — computes the RS proxy, % off 52-week high, base
-  depth/length, and breakout volume from the ticker's OHLCV bars. Standard library only.
-- `scripts/chart_data.py` — turns daily OHLCV bars (IBKR / row-array / Polygon-Massive shapes)
-  into the report's `priceChart` block: candles for the display window plus the 50/200-day
+  depth/length, and breakout volume from the ticker's OHLCV bars. Reads TradingView
+  `{t,o,h,l,c,v}` dicts and `[t,o,h,l,c,v]` rows interchangeably. Standard library only.
+- `scripts/chart_data.py` — turns daily OHLCV bars (TradingView / IBKR / row-array /
+  Polygon-Massive shapes) into the report's `priceChart` block: candles for the display window plus the 50/200-day
   EMA (or SMA) computed over the *full* history and the 50-day average volume. Standard
   library only.
 - `scripts/check_parity.py` + `parity-manifest.json` — guards the shared methodology. This skill and
-  `can-slim-recommend` share `references/canslim-methodology.md` and `scripts/relative_strength.py`
-  **verbatim**, so any change to a threshold, a scoring rule, the pivot definition, the RS maths or
+  `can-slim-recommend` share `references/canslim-methodology.md` and `scripts/relative_strength.py`,
+  so any change to a threshold, a scoring rule, the pivot definition, the RS maths or
   the data-freshness policy is *material* and must be ported to the sister skill in the same piece
   of work. The script reports byte-level drift; see "Keep `can-slim-recommend` at parity" in
   `SKILL.md` for the full rule.
@@ -78,8 +83,11 @@ tomorrow (or ten minutes later) re-measures rather than repeating. For the ticke
   chosen to read clearly on white. Pure-ASCII source.
 
 ## Requirements
-- IBKR MCP connector (read-only market data; never trades).
-- Fundamental-data connectors and/or web search in the session.
+- **TradingView MCP** (`Trading_View`) — preferred: bars *and* financials in one connector,
+  read-only tools only (the skill never touches TradingView portfolios or watchlists).
+- IBKR MCP connector or Massive Market Data as the price/volume alternate (read-only; never trades).
+- Fundamental-data connectors and/or web search for anything the above don't carry — notably
+  institutional sponsorship.
 - A PDF engine for the default output — headless **Chrome/Chromium/Edge** (preferred), or
   `pip install playwright weasyprint`, or `wkhtmltopdf`. Without one the skill falls back to
   handing you the HTML and says so. A modern browser to view the HTML version if you ask for it.

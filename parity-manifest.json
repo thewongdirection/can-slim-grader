@@ -1,9 +1,9 @@
 {
   "sister": "https://github.com/thewongdirection/can-slim-recommend",
-  "note": "sha256 of the files shared verbatim with can-slim-recommend. Update ONLY in the same commit that ports the change to the sister repo.",
+  "note": "sha256 of the files shared with can-slim-recommend. They are NOT byte-identical any more - the sister carries screener-only extensions (a 0-10 rubric in the methodology, an --asof mode in relative_strength.py) - so port the CHANGE, not the file. Update these hashes ONLY in the same commit that lands the port.",
   "files": {
     "references/canslim-methodology.md": "7786ec292a224ec90199c4a3ab40ce5eec4dd75ffedc124d0764649a0dab86fa",
-    "scripts/relative_strength.py": "05a81e31642a77c6ccd4fe7a4d10cf938586d376c0cf4ace3cc14991db3edf93"
+    "scripts/relative_strength.py": "dc9138f940302437c840b6ffc0ad24a283b07ba4550bb40b2629e046b8c25e74"
   },
   "pending_port": [
     {

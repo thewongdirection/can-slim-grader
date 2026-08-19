@@ -7,8 +7,8 @@ description: >-
   QUALITY of one stock or whether a specific ticker is any good — "evaluate NVDA", "is TSLA a good
   stock", "rate AAPL", "does PLTR pass CAN SLIM", "grade this stock", "should I be interested in
   MSFT", "is CRWD a buy", "how strong is <company>". Works for any publicly traded ticker; pulls
-  live price/volume from Interactive Brokers (IBKR) and fundamentals from connected financial-data
-  sources or the web. This is the single-stock GRADING lens (one ticker in, one verdict) and the
+  live price/volume and financials from TradingView (or Interactive Brokers / other connected
+  financial-data sources / the web). This is the single-stock GRADING lens (one ticker in, one verdict) and the
   sister skill of `can-slim-recommend` — for a ranked LIST of screened ideas use
   `can-slim-recommend`; for a data-rich single-stock dashboard use `ibkr-review-ticker`. Analysis
   and decision support, never personalized investment advice and never trading.
@@ -20,7 +20,8 @@ description: >-
 The two are a matched pair on one CAN SLIM methodology: `can-slim-recommend` is the market-wide
 screener that returns a ranked LIST of ideas; **`can-slim-grader` is the single-ticker grading
 lens** — one ticker in, one verdict out. They share `references/canslim-methodology.md` and
-`scripts/relative_strength.py` verbatim.
+`scripts/relative_strength.py`, and any material change to the method has to land on both sides
+(see the parity section at the end).
 
 Takes **one ticker** and grades it, letter by letter, against the seven CAN SLIM criteria,
 then returns a **BUY-RANGE / WATCH / AVOID** verdict with the evidence, a chart-position read
@@ -47,15 +48,22 @@ the chart-base patterns, the sell rules, and the classic mistakes. **Read
 fundamental source-priority ladder, and the pass/partial/fail rubric per letter.
 
 ## Prerequisites
-- **Price/volume** for the technical letters (N/S/L/M) from either the **IBKR MCP connector**
-  (read-only market data; 52-week stats + the stock's group) or **Massive Market Data**
-  (Polygon-style `/v2/aggs` OHLCV bars + ticker overview) — either can feed
-  `scripts/relative_strength.py`. Both are deferred; load with `ToolSearch` first.
+- **TradingView (`Trading_View` MCP) is the preferred source for both halves of the grade** — it
+  is the only connector here that covers the price/volume letters *and* the earnings letters:
+  `get_ohlcv` (daily + weekly bars, feeds both scripts unedited), `get_financial_history`
+  (per-quarter and per-year revenue/EPS **with YoY**), `get_earnings_history` (street actual vs
+  consensus, beat rate, next report date, post-earnings price reaction), `get_financials` (ROE,
+  margins, debt/equity, market cap), `get_symbol_data` (52-week high/low, float, average volume).
+  Symbols are `EXCHANGE:TICKER`. Tools are deferred — load with `ToolSearch` first.
+- **Alternates for price/volume** (N/S/L/M) when TradingView is not connected: the **IBKR MCP
+  connector** (read-only market data; 52-week stats + the stock's group) or **Massive Market
+  Data** (Polygon-style `/v2/aggs` bars). Both feed `scripts/relative_strength.py` too.
   **Throttle Massive to at most 5 calls/minute** (see the data guide for batching).
-- **Fundamental data** via connectors (Daloopa / bigdata.com / LSEG / **Massive** — *preferred
-  over FMP* when its financials are plan-entitled / **Financial Modeling Prep (FMP)** / SEC EDGAR
-  through `securities-filings-lookup`) or **web search**. See the source ladder in the data guide;
-  **prefer Massive over FMP**, falling back to FMP only when Massive's financials return 403.
+- **Alternates for fundamentals**: Daloopa / bigdata.com / LSEG / Massive / **FMP** (often
+  plan-gated — `statements` and `quote` returned ACCESS DENIED in an August-2026 check) / SEC
+  EDGAR through `securities-filings-lookup`, else **web search**. See the ladder in the data guide.
+- **Institutional sponsorship (I) is the one letter TradingView cannot answer** — take it from
+  13F/Form 4 (FMP `form13F`, `securities-filings-lookup`) or the web, and say which.
 - If no market-data connector is available, source price/technicals from the web too and say
   so — don't block.
 
@@ -85,26 +93,42 @@ from a tool call made *in this run*:
   fill a gap with a remembered or previously-fetched number.
 
 ### 1 — Resolve the ticker
-`search_contracts` → exact symbol, primary listing; keep `contract_id`, company name, and the
-stock's sector/industry group (`get_company_themes`). If the user names a company rather than a
-symbol, resolve it.
+TradingView: `search_symbols` → the `EXCHANGE:TICKER` id (e.g. `NASDAQ:WDC`); `get_financials`
+returns the sector/industry. IBKR alternate: `search_contracts` → exact symbol, primary listing,
+`contract_id`, plus the stock's group (`get_company_themes`). If the user names a company rather
+than a symbol, resolve it.
 
 ### 2 — Assess market direction (M)
-Pull SPY/QQQ daily bars (or web), count distribution days, check the 50/200-day trend. Classify
+Pull SPY daily bars — `get_ohlcv("AMEX:SPY", interval="1D", count=300)`, or the IBKR/web
+equivalent — count distribution days (a close down >=0.2% on heavier volume than the session
+before) over the last ~25 sessions, and check the index against its 50- and 200-day. Classify
 Confirmed uptrend / Under pressure / Correction. M is market-wide context and one of the seven
 graded letters.
 
 ### 3 — Gather the stock's data
-Per `data-and-scoring-guide.md`: `get_price_snapshot` (52-week high/low, price, YTD) and
-`get_price_history` (weekly ~1-2 yr for base shape; **daily `period=TWO_YEARS`** ≈ 500 bars —
-6 months covers breakout volume & RS, but the report's chart displays 300 sessions and needs
-~200 more before that window to seed the 200-day EMA, so pull the long daily series once and use
-it for both; `period=FIVE_YEARS` if you want margin). Run
-`scripts/relative_strength.py` on the ticker's bars + SPY's bars for the RS proxy, % off
+Per `data-and-scoring-guide.md`. With TradingView that is five calls:
+`get_ohlcv(interval="1D", count=500)` and `get_ohlcv(interval="1W", count=104)` for the bars,
+`get_symbol_data` for the 52-week high/low, float and average volume,
+`get_financial_history` (`period="fq"` for C, `period="fy"` for A — both carry `yoy_pct`),
+`get_earnings_history` for the street EPS actual vs consensus and the next report date, and
+`get_financials` for ROE/margins/debt. (IBKR alternate: `get_price_snapshot` +
+`get_price_history` daily `period=TWO_YEARS` ≈ 500 bars and weekly ~1-2 yr.) 500 daily bars is
+the floor either way — 6 months covers breakout volume and RS, but the report's chart displays
+300 sessions and needs ~200 more before that window to seed the 200-day EMA.
+
+Run `scripts/relative_strength.py` on the ticker's bars + SPY's bars for the RS proxy, % off
 52-week high, base depth/length, and breakout volume, and `scripts/chart_data.py` on the same
-daily bars for the report's candlestick chart. Then gather fundamentals (C, A, N, I) from
-the source ladder — prefer connected financial data over generic web search. For a deeper
-financial picture you may fold in the `ibkr-review-ticker` skill.
+daily bars for the report's candlestick chart. **Both scripts read the provider payload as it
+came back** — TradingView `{t,o,h,l,c,v}` dicts or IBKR/Polygon shapes — so never retype bars.
+Then gather what TradingView does not carry: **institutional sponsorship (I)** from 13F/Form 4 or
+the web, and the "new" story for N. For a deeper financial picture you may fold in the
+`ibkr-review-ticker` skill.
+
+**Two TradingView traps that will misgrade a letter** (details in the data guide): its
+`get_financial_history.eps` is **GAAP** — grade C on `get_earnings_history.eps_actual` (the
+street figure) and treat a wide GAAP/street gap as the earnings-quality check; and its **TTM**
+growth fields break across a spin-off (WDC read -2.7% TTM revenue growth while every quarter grew
+25-45%), so take growth from the per-period `yoy_pct`, never from TTM.
 
 ### 4 — Score each letter
 Grade C, A, N, S, L, I, M **pass / partial / fail** against the thresholds in the methodology
@@ -173,9 +197,10 @@ has no buy point, and the honest entry is **"None now" plus the condition that w
    sessions (~14 months)**, the window that makes a 200-day EMA meaningful. Never hand-transcribe
    bars; pipe the daily OHLCV you already pulled through the script:
    `python scripts/chart_data.py <bars>.json --window 300 --marker <pivot>:Pivot:accent --js`
-   (it reads IBKR `get_price_history` responses, `[t,o,h,l,c,v]` rows, or Polygon/Massive
-   `/v2/aggs` results) and paste its output as `CONFIG.priceChart`. **Feed it ≥500 daily bars**
-   (`period=TWO_YEARS`, `step=ONE_DAY`; `period=FIVE_YEARS` for margin) — the 200-day EMA needs
+   (it reads TradingView `get_ohlcv` responses, IBKR `get_price_history` responses,
+   `[t,o,h,l,c,v]` rows, or Polygon/Massive `/v2/aggs` results) and paste its output as
+   `CONFIG.priceChart`. **Feed it ≥500 daily bars** (`get_ohlcv count=500`, or IBKR
+   `period=TWO_YEARS, step=ONE_DAY`) — the 200-day EMA needs
    ~200 sessions *before* the first visible candle, on top of the 300 displayed, and the script
    warns and annotates the chart when the history is too thin. Add `--marker` lines for the pivot
    and the 7-8% stop so the chart shows the same prices as the entry/stop band. If price data is
@@ -210,10 +235,18 @@ verdict with the defensive rule (cut losses 7-8%).
 different question. Two files are shared **verbatim** between the repos, and the rules in the rest
 of this document are meant to hold on both sides:
 
-| Shared verbatim | Why it must match |
+| Shared file | Why it must match |
 |---|---|
 | `references/canslim-methodology.md` | the rule set both skills grade against |
 | `scripts/relative_strength.py` | the RS proxy, % off high, base metrics, breakout volume |
+
+**These two are no longer byte-identical, and that is expected — port the CHANGE, not the file.**
+As of 2026-08 the sister carries screener-only additions on top of the shared substance: an extra
+0-10 grading rubric in the methodology (its dashboard scores /70 rather than pass/partial/fail)
+and a point-in-time `--asof` truncation mode in `relative_strength.py` (for historical screens).
+Copying either file wholesale would delete that work. Apply the same rule or the same maths to
+the sister's version and leave its extensions intact. `check_parity.py` hashes **this** repo's
+copies, so it still tells you when a shared file moved here and owes a port.
 
 **A change is MATERIAL — and must be ported to the sister skill in the same piece of work —
 whenever it alters what a letter means, what a threshold is, how a number is computed, or how
@@ -263,7 +296,12 @@ substance, adapt the framing.
 - **Fresh data every run — no cached grades.** Re-pull price, volume and fundamentals on every
   invocation and rebuild the report from them; never reuse a prior run's figures or output file,
   and never answer a follow-up from the previous verdict. See step 0.
-- **Read-only, market data only.** IBKR tools allowed: `search_contracts`, `get_price_snapshot`,
+- **Read-only, market data only.** From TradingView use only the read tools (`get_ohlcv`,
+  `get_quote`, `get_financials`, `get_financial_history`, `get_earnings_history`,
+  `get_symbol_data`, `search_symbols`, `get_technicals`, `get_news`). **Never** call its
+  portfolio or watchlist WRITE tools (`create_portfolio`, `add_portfolio_transactions`,
+  `update_portfolio`, `edit_portfolio_transaction`, any `delete_*`) — this skill grades a stock,
+  it does not touch the user's book. IBKR tools allowed: `search_contracts`, `get_price_snapshot`,
   `get_price_history`, `get_company_themes`, `search_investment_topics`, `get_theme_details`.
   **Never** call order tools or account tools (balances, positions, orders, trades, summary, PA
   analytics), even if asked.
@@ -281,11 +319,13 @@ substance, adapt the framing.
 - `references/data-and-scoring-guide.md` — the single-ticker data-gathering sequence, the
   fundamental source ladder, and the pass/partial/fail scoring rubric + verdict definitions.
 - `scripts/relative_strength.py` — computes the RS proxy, % off 52-week high, base
-  depth/length, and breakout volume from the ticker's OHLCV bars vs SPY. Pure standard library.
+  depth/length, and breakout volume from the ticker's OHLCV bars vs SPY. Accepts TradingView
+  `{t,o,h,l,c,v}` dicts and `[t,o,h,l,c,v]` rows interchangeably. Pure standard library.
+  (Shared with `can-slim-recommend`.)
 - `scripts/chart_data.py` — builds the report's `priceChart` block (daily candles + 50/200-day
-  EMA/SMA + 50-day average volume) from daily OHLCV bars. Accepts IBKR, row-array, or
-  Polygon/Massive shapes; computes the averages over the full history and emits only the
-  display window (default 300 sessions, so feed it ~500 bars). Pure standard library.
+  EMA/SMA + 50-day average volume) from daily OHLCV bars. Accepts TradingView, IBKR, row-array
+  or Polygon/Massive shapes; computes the averages over the full history and emits
+  only the display window (default 300 sessions, so feed it ~500 bars). Pure standard library.
 - `scripts/check_parity.py` + `parity-manifest.json` — hashes the files shared verbatim with
   `can-slim-recommend` and reports drift since the last recorded sync. Run before committing any
   change to this skill; byte-level only, so material rule changes still need porting by hand.

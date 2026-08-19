@@ -9,18 +9,21 @@ daily candles for the display window (default the last 300 sessions ~= 14 months
 WHY A SCRIPT: the 200-day EMA needs ~200 sessions of history BEFORE the first visible
 candle - so a 300-session window wants ~500 daily bars in, and the 200-day line only means
 something once it spans most of what you see. Feed this the longest daily series you can
-pull (>= 500 bars, i.e. IBKR period=TWO_YEARS; FIVE_YEARS for margin); it computes the
-averages across the whole series and then slices only the display window, so CONFIG stays
-small and the moving averages are correctly seeded rather than restarted at the left edge
-of the chart.
+pull (>= 500 bars: TradingView get_ohlcv interval="1D" count=500, or IBKR period=TWO_YEARS);
+it computes the averages across the whole series and then slices only the display window, so
+CONFIG stays small and the moving averages are correctly seeded rather than restarted at the
+left edge of the chart.
 
 INPUT (auto-detected, file argument or stdin):
-  1. IBKR `get_price_history` response - parallel arrays:
+  1. TradingView `get_ohlcv` response - {"symbol":.., "interval":"1D", "bars":[{t,o,h,l,c,v}, ...]}
+     (call it with interval="1D" and count>=500; do NOT pass summary=True, which omits `bars`)
+  2. IBKR `get_price_history` response - parallel arrays:
        {"time":[...], "open":[...], "high":[...], "low":[...], "close":[...], "volume":[...]}
-  2. Row bars, the same shape scripts/relative_strength.py takes:
+  3. Row bars, the same shape scripts/relative_strength.py takes:
        [[t,o,h,l,c,v], ...]   or {"daily":[...]} / {"bars":[...]} / {"candidates":[{"daily":[...]}]}
-  3. Polygon / Massive `/v2/aggs` - {"results":[{"t":ms,"o":..,"h":..,"l":..,"c":..,"v":..}, ...]}
-  Timestamps may be epoch seconds, epoch millis, or an ISO string; only the date is kept.
+  4. Polygon / Massive `/v2/aggs` - {"results":[{"t":ms,"o":..,"h":..,"l":..,"c":..,"v":..}, ...]}
+  Timestamps may be epoch seconds, epoch millis, or an ISO string; only the date is kept, and
+  epoch values are read in UTC (a US session stamped 13:30Z lands on its own trading date).
 
 OUTPUT: JSON on stdout - paste it as CONFIG.priceChart in the filled dashboard. It carries
 `lastBar` / `barAgeDays` so the report states what the data is as-of, and the script warns (and
@@ -28,6 +31,7 @@ annotates the chart) when the newest bar is stale - bars must be re-pulled every
 
 Usage:
   python chart_data.py nvda_daily.json                     # last 300 sessions, 50/200 EMA
+  python chart_data.py tv_ohlcv.json --window 300 --js     # TradingView get_ohlcv output, as-is
   python chart_data.py nvda_daily.json --window 300 --js   # ready-to-paste "priceChart: {...},"
   python chart_data.py bars.json --type sma                # 50/200 simple MAs instead
   python chart_data.py bars.json --marker 178:Pivot:accent --marker 164:"Stop -8%":fail
@@ -92,6 +96,9 @@ def load_rows(data):
             rows = _rows_from_list(data["bars"])
         elif isinstance(data.get("candidates"), list) and data["candidates"]:
             rows = _rows_from_list(data["candidates"][0].get("daily", []))
+        elif isinstance(data.get("summary"), dict):
+            raise SystemExit("chart_data: this response carries only `summary` and no `bars` - "
+                             "re-run TradingView get_ohlcv with summary=False (the default).")
         else:
             raise SystemExit("chart_data: unrecognized input shape; see the docstring.")
     else:
