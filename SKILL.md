@@ -3,7 +3,7 @@ name: can-slim-grader
 description: >-
   Grade a single specified stock ticker against the CAN SLIM growth-investing model and return a
   letter-by-letter (C-A-N-S-L-I-M) scorecard with a BUY-RANGE / WATCH / AVOID verdict, as a
-  light-themed PDF dashboard (the HTML version on request). Use whenever the user wants to judge the
+  print-ready A4 PDF dashboard (a dark-themed HTML version on request). Use whenever the user wants to judge the
   QUALITY of one stock or whether a specific ticker is any good — "evaluate NVDA", "is TSLA a good
   stock", "rate AAPL", "does PLTR pass CAN SLIM", "grade this stock", "should I be interested in
   MSFT", "is CRWD a buy", "how strong is <company>". Works for any publicly traded ticker; pulls
@@ -27,9 +27,9 @@ Takes **one ticker** and grades it, letter by letter, against the seven CAN SLIM
 then returns a **BUY-RANGE / WATCH / AVOID** verdict with the evidence, a chart-position read
 (including a **daily candlestick chart** of the last **300 sessions (~14 months)** with the
 50/200-day EMA and volume), and — if it's actionable — the pivot buy point and the 7-8%
-loss-cutting stop. Output is a **PDF dashboard by default** — a light-themed, print-ready report
-rendered from a self-contained HTML working file — and the **HTML itself only if the user asks**
-(same report, plus the chart's hover readout).
+loss-cutting stop. Output is a **PDF dashboard by default** — print-ready on **A4 with a 15 mm
+margin**, in a light palette — rendered from a self-contained HTML working file, and the **HTML
+itself only if the user asks** (same report in a **dark** theme, plus the chart's hover readout).
 **Decision support, not advice, and never an order.**
 
 ## What CAN SLIM is (the standard this skill grades against)
@@ -207,7 +207,9 @@ has no buy point, and the honest entry is **"None now" plus the condition that w
    unavailable, leave `bars` empty — the chart section hides itself — and say the chart was
    omitted for lack of data.
 2. **Render the PDF — this is the default deliverable.** The filled `<TICKER>-canslim.html` is the
-   working file (self-contained, light-themed, print-optimized); the user gets the PDF:
+   working file (self-contained; **dark on screen, light on paper** — the template's `@media print`
+   block swaps the palette and sets **A4 with a 15 mm margin**, so you never choose); the user gets
+   the PDF:
    `python scripts/html_to_pdf.py <TICKER>-canslim.html <TICKER>-canslim.pdf` (headless
    Chrome/Chromium/Edge → Playwright → WeasyPrint → wkhtmltopdf; it prints the engine used).
    **Re-read `CONFIG` against the self-audit rules before you export** — grade vs the evidence
@@ -217,10 +219,11 @@ has no buy point, and the honest entry is **"None now" plus the condition that w
    say so and hand over the HTML instead — never block the grade on the export.
 3. **HTML on request only.** Give the `<TICKER>-canslim.html` file (and/or open it in the browser)
    when the user asks for the HTML, an interactive version, or the chart's hover readout — it is
-   the same report with a crosshair readout the PDF cannot carry. It renders itself from `CONFIG`;
-   do not hand-edit the DOM. A dark rendering is likewise on request: set
-   `<html lang="en" data-theme="dark">` in the filled file (light is the default, on screen and
-   in print).
+   the same report, **rendered dark**, with a crosshair readout the PDF cannot carry. It renders
+   itself from `CONFIG`; do not hand-edit the DOM. **Never re-theme the file to make the PDF dark
+   or the HTML light** — the two media are meant to differ, and print CSS overrides any
+   `data-theme` anyway. `<html lang="en" data-theme="light">` only previews the printed palette on
+   screen.
 4. Keep the chat reply short: the verdict, the two or three letters that drove it, and the buy
    point/stop if actionable.
 
@@ -330,16 +333,18 @@ substance, adapt the framing.
   `can-slim-recommend` and reports drift since the last recorded sync. Run before committing any
   change to this skill; byte-level only, so material rule changes still need porting by hand.
 - `scripts/html_to_pdf.py` — renders the filled HTML into the **PDF that is the default
-  deliverable**. Multi-engine (headless Chrome/Chromium/Edge with header/footer suppressed →
-  Playwright → WeasyPrint → wkhtmltopdf); prints the engine used. Pure standard library (uses
+  deliverable**, A4 with a 15 mm margin. Multi-engine (headless Chrome/Chromium/Edge with
+  header/footer suppressed → Playwright → WeasyPrint → wkhtmltopdf); Chrome and WeasyPrint take
+  the page box from the template's `@page` rule, the other two are passed A4/15 mm explicitly.
+  Prints the engine used. Pure standard library (uses
   whatever browser/lib is present).
-- `assets/evaluation_template.html` — the report itself: a self-contained, **light-themed**
-  single-stock CAN SLIM dashboard driven by a `CONFIG` object (verdict badge, the seven-letter
-  scorecard with evidence, the daily candlestick chart, technicals, and the buy/sell plan). It is
-  the working file behind the PDF, and the deliverable itself when the user asks for the HTML;
-  `data-theme="dark"` on `<html>` flips it to the dark palette on request. **It audits itself on
-  render** and banners any grade that contradicts its own evidence, a pivot that isn't in
+- `assets/evaluation_template.html` — the report itself: a self-contained single-stock CAN SLIM
+  dashboard driven by a `CONFIG` object (verdict badge, the seven-letter scorecard with evidence,
+  the daily candlestick chart, technicals, and the buy/sell plan). **One file, two media:
+  dark on screen, light on A4 with a 15 mm margin in print** — `@media print` swaps the palette
+  and sets the page box, so the HTML deliverable is dark and the PDF is print-friendly without
+  editing anything. **It audits itself on render** and banners any grade that contradicts its own evidence, a pivot that isn't in
   new-high ground, a score that doesn't add up, or a stop that isn't 7-8%. The chart is
-  hand-rolled inline SVG — no chart library, no network calls — with candle/EMA colours picked
-  for contrast on white. Pure-ASCII source; print CSS is A4/Letter with
+  hand-rolled inline SVG — no chart library, no network calls — with candle/EMA colours that
+  switch with the palette. Pure-ASCII source; print CSS is `@page{size:A4; margin:15mm}` with
   `print-color-adjust:exact` so badges and chips survive the export.

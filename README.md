@@ -2,9 +2,9 @@
 
 A Claude skill that **evaluates a single stock ticker against the CAN SLIM growth-investing
 model** and returns a structured, letter-by-letter scorecard with a **BUY-RANGE / WATCH /
-AVOID** verdict — delivered as a **light-themed PDF dashboard by default**, rendered from a
-self-contained HTML working file. Ask for the **HTML** and you get that too: the same report plus
-a hover readout on the chart (and a `data-theme="dark"` switch if you prefer dark).
+AVOID** verdict — delivered as a **PDF dashboard by default** (A4, 15 mm margins, light palette
+so it prints cleanly), rendered from a self-contained HTML working file. Ask for the **HTML** and
+you get that too: the same report in a **dark** theme, plus a hover readout on the chart.
 
 It activates whenever you want to judge the *quality* of one stock — *"evaluate NVDA"*, *"is
 TSLA a good stock"*, *"rate AAPL"*, *"does PLTR pass CAN SLIM"*, *"how does AMD score"*, *"is
@@ -73,14 +73,13 @@ tomorrow (or ten minutes later) re-measures rather than repeating. For the ticke
   the data-freshness policy is *material* and must be ported to the sister skill in the same piece
   of work. The script reports byte-level drift; see "Keep `can-slim-recommend` at parity" in
   `SKILL.md` for the full rule.
-- `scripts/html_to_pdf.py` — renders the **default deliverable**, the PDF (headless
-  Chrome/Chromium/Edge → Playwright → WeasyPrint → wkhtmltopdf).
-- `assets/evaluation_template.html` — the report: a self-contained, **light-themed** single-stock
-  CAN SLIM dashboard driven by a `CONFIG` object. It is the working file the PDF is printed from,
-  and the deliverable itself when you ask for the HTML; `data-theme="dark"` flips it to a dark
-  palette. The candlestick chart is hand-rolled inline SVG — no chart library and no network
+- `scripts/html_to_pdf.py` — renders the **default deliverable**, the PDF on A4 with 15 mm
+  margins (headless Chrome/Chromium/Edge → Playwright → WeasyPrint → wkhtmltopdf).
+- `assets/evaluation_template.html` — the report: a self-contained single-stock CAN SLIM dashboard
+  driven by a `CONFIG` object. **One file, two media** — dark on screen (the HTML deliverable),
+  light on A4 with 15 mm margins in print (the PDF), handled by `@media print`. The candlestick chart is hand-rolled inline SVG — no chart library and no network
   calls, so the file stays a single self-contained page — with candle, EMA and volume colours
-  chosen to read clearly on white. Pure-ASCII source.
+  that switch with the palette. Pure-ASCII source.
 
 ## Requirements
 - **TradingView MCP** (`Trading_View`) — preferred: bars *and* financials in one connector,

@@ -7,10 +7,12 @@
        the page renders itself. Do not hand-edit the DOM.
     3. Export the PDF - that is the default deliverable:
          python scripts/html_to_pdf.py <TICKER>-canslim.html <TICKER>-canslim.pdf
-       The design is LIGHT (white panels on a pale background) so it prints cleanly; print CSS
-       is A4/Letter. Hand over the HTML as well only if the user asks for it - it is the same
-       report plus the hover readout on the chart. A dark rendering is available on request by
-       setting <html lang="en" data-theme="dark">.
+       TWO MEDIA, TWO PALETTES, one file: on screen the report is DARK; every print/PDF render
+       switches to a light palette on A4 with a 15mm margin all round, so the PDF stays cheap to
+       print and easy to read on paper. You do not choose between them - @media print does.
+       Hand over the HTML as well only if the user asks for it - it is the same report, dark,
+       plus the hover readout on the chart. <html lang="en" data-theme="light"> previews the
+       printed palette on screen; neither data-theme value changes what prints.
 
   THE DAILY CHART (CONFIG.priceChart):
     Build it with scripts/chart_data.py - never hand-transcribe bars:
@@ -54,26 +56,29 @@
 <title>CAN SLIM Evaluation</title>
 <style>
   :root{
-    /* Light is the default design for this report - it is what the PDF export prints, so every
-       colour below is chosen to stay legible on white/paper (dark ink, saturated accents). */
-    --bg:#f5f7fa; --panel:#ffffff; --ink:#171b22; --muted:#5a6472; --line:#dbe1e9;
-    --accent:#1552d0; --accent-soft:#eaf1fe; --chip:#eef1f5;
-    --pass:#0b7a43; --pass-bg:#e4f4ea; --partial:#9a5800; --partial-bg:#fcf0da;
-    --fail:#c02a26; --fail-bg:#fdeae8;
-    --ema50:#1552d0; --ema200:#7b2fbe;
-    /* The chart carries its own candle/volume tokens so it can be tuned for contrast on a light
-       background without dragging the pass/partial/fail badge colours along with it. */
-    --cndl-up:#0b8f57; --cndl-dn:#d1392f;
+    /* DARK is the on-screen design - this is what you get when the HTML file is opened in a
+       browser. Paper is a different medium: every print/PDF render switches to the light palette
+       below (see @media print), so the PDF stays legible and cheap to print. */
+    --bg:#0f1218; --panel:#171b22; --ink:#e6e9ef; --muted:#9aa4b2; --line:#262c36;
+    --accent:#5b8cff; --accent-soft:#1a2436; --chip:#212733;
+    --pass:#3ecf8e; --pass-bg:#123122; --partial:#e0a94e; --partial-bg:#33280f;
+    --fail:#f2776f; --fail-bg:#3a1512;
+    --ema50:#5b8cff; --ema200:#c084fc;
+    /* The chart carries its own candle/volume tokens so it can be tuned for contrast against the
+       background it is actually on, without dragging the pass/partial/fail badge colours along. */
+    --cndl-up:#3ecf8e; --cndl-dn:#f2776f;
     --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
     --sans:'Inter',system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
   }
-  /* Optional manual dark override (<html data-theme="dark">); light stays the default even in a
-     dark-OS browser, so the on-screen report and the PDF always match. */
-  :root[data-theme="dark"]{--bg:#0f1218;--panel:#171b22;--ink:#e6e9ef;--muted:#9aa4b2;--line:#262c36;
-      --accent:#5b8cff;--accent-soft:#1a2436;--chip:#212733;
-      --pass:#3ecf8e;--pass-bg:#123122;--partial:#e0a94e;--partial-bg:#33280f;--fail:#f2776f;--fail-bg:#3a1512;
-      --ema50:#5b8cff;--ema200:#c084fc;
-      --cndl-up:#3ecf8e;--cndl-dn:#f2776f;}
+  /* Optional manual light override for the screen (<html data-theme="light">). It is the same
+     palette the PDF uses, so setting it previews exactly what will print. Neither this nor
+     data-theme="dark" changes the printed output - paper is always light. */
+  :root[data-theme="light"]{--bg:#f5f7fa;--panel:#ffffff;--ink:#171b22;--muted:#5a6472;--line:#dbe1e9;
+      --accent:#1552d0;--accent-soft:#eaf1fe;--chip:#eef1f5;
+      --pass:#0b7a43;--pass-bg:#e4f4ea;--partial:#9a5800;--partial-bg:#fcf0da;
+      --fail:#c02a26;--fail-bg:#fdeae8;
+      --ema50:#1552d0;--ema200:#7b2fbe;
+      --cndl-up:#0b8f57;--cndl-dn:#d1392f;}
 
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.5;-webkit-font-smoothing:antialiased}
@@ -163,8 +168,19 @@
   footer a{color:var(--accent)} .sources a{margin-right:12px;white-space:nowrap}
 
   @media print{
+    /* PAPER IS ALWAYS LIGHT. Listing the two data-theme selectors as well means this wins over
+       both the dark :root above and an explicit data-theme on <html>, so the PDF looks the same
+       whatever the file is set to on screen. */
+    :root, :root[data-theme="dark"], :root[data-theme="light"]{
+      --bg:#f5f7fa; --panel:#ffffff; --ink:#171b22; --muted:#5a6472; --line:#dbe1e9;
+      --accent:#1552d0; --accent-soft:#eaf1fe; --chip:#eef1f5;
+      --pass:#0b7a43; --pass-bg:#e4f4ea; --partial:#9a5800; --partial-bg:#fcf0da;
+      --fail:#c02a26; --fail-bg:#fdeae8;
+      --ema50:#1552d0; --ema200:#7b2fbe;
+      --cndl-up:#0b8f57; --cndl-dn:#d1392f;
+    }
     *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
-    body{background:var(--bg)}   /* light by default, so the PDF matches the screen and prints clean */
+    body{background:var(--bg)}
     .wrap{max-width:none;padding:0}
     .row,.verdict,.stat,.callout,.chartcard{break-inside:avoid}
     a{color:inherit;text-decoration:none}
@@ -172,7 +188,9 @@
     .hoveronly{display:none}   /* the crosshair readout is screen-only; the PDF has no hover */
     /* on screen the readout scrolls sideways; on paper there is nowhere to scroll, so let it wrap */
     .readout{white-space:normal;overflow:visible}
-    @page{margin:12mm}
+    /* A4 with a 15mm gutter on every edge. Chrome's --print-to-pdf takes the sheet size from
+       here, so this is what makes the export A4 rather than US Letter. */
+    @page{size:A4; margin:15mm}
   }
 </style>
 </head>

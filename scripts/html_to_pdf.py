@@ -3,10 +3,12 @@
 html_to_pdf.py - render the filled CAN SLIM evaluation HTML to PDF.
 
 The PDF is this skill's DEFAULT deliverable: the filled <TICKER>-canslim.html is the working
-file, and this turns it into the report the user gets. The template is light-themed and
-print-optimized (A4/Letter, print-color-adjust:exact), so a headless-Chrome print reproduces
-the on-screen report faithfully. This script tries several engines so it works across
-environments, and prints the engine it used.
+file, and this turns it into the report the user gets. The template is dark on screen and
+switches to a light palette for print (@media print, print-color-adjust:exact), on A4 with a
+15mm margin declared in its @page rule. Chrome and WeasyPrint honour that rule directly; the
+Playwright and wkhtmltopdf paths below pass the same A4/15mm explicitly so every engine
+produces the same page. This script tries several engines so it works across environments, and
+prints the engine it used.
 
 Usage:
     python html_to_pdf.py <input.html> [output.pdf]
@@ -92,8 +94,9 @@ def via_playwright(inp, out):
             b = p.chromium.launch()
             pg = b.new_page()
             pg.goto(url, wait_until="networkidle")
-            pg.pdf(path=_abs(out), format="A4", print_background=True,
-                   margin={"top": "12mm", "bottom": "12mm", "left": "12mm", "right": "12mm"})
+            # Match the template's @page rule: A4, 15mm on every edge.
+            pg.pdf(path=_abs(out), format="A4", print_background=True, prefer_css_page_size=True,
+                   margin={"top": "15mm", "bottom": "15mm", "left": "15mm", "right": "15mm"})
             b.close()
         return os.path.exists(out) and os.path.getsize(out) > 1000
     except Exception:
@@ -118,6 +121,9 @@ def via_wkhtmltopdf(inp, out):
         return False
     try:
         subprocess.run([exe, "--enable-local-file-access", "--print-media-type",
+                        "--page-size", "A4",
+                        "--margin-top", "15mm", "--margin-bottom", "15mm",
+                        "--margin-left", "15mm", "--margin-right", "15mm",
                         _abs(inp), _abs(out)], check=True, timeout=120,
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         return os.path.exists(out) and os.path.getsize(out) > 1000
