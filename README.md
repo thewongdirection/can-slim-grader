@@ -80,6 +80,11 @@ allowed; an undated or silently stale one is not. For the ticker you name it:
   `SKILL.md` for the full rule.
 - `scripts/html_to_pdf.py` — renders the **default deliverable**, the PDF on A4 with 15 mm
   margins (headless Chrome/Chromium/Edge → Playwright → WeasyPrint → wkhtmltopdf).
+- `scripts/export_portable.py` — bundles the skill into **one self-contained Markdown file** for
+  use with a non-Claude model (Gemini, ChatGPT, a local model). Inlines every file verbatim behind
+  a HOST NOTES preamble that says what data the host must supply and how to read the
+  Claude-specific parts (MCP connectors, `ToolSearch`, sibling skills). `--zip` also writes a zip
+  of the raw files. Re-run it after any change so the portable copy doesn't drift.
 - `assets/evaluation_template.html` — the report: a self-contained single-stock CAN SLIM dashboard
   driven by a `CONFIG` object. **One file, two media** — dark on screen (the HTML deliverable),
   light on A4 with 15 mm margins in print (the PDF), handled by `@media print`. The candlestick chart is hand-rolled inline SVG — no chart library and no network
