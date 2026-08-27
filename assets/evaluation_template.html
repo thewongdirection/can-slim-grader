@@ -32,7 +32,17 @@
     verdict score that doesn't match the letters, an entry price named while N is not PASS or
     more than ~10% below CONFIG.high52, a stop that isn't 7-8% below entry, BUY-RANGE without
     C/A/N/L passing, or a scorecard that isn't the seven letters in order.
-    NEVER ship a report showing that banner - fix the grade or the evidence, not the check.
+    It also checks PROVENANCE: dataStatus must exist, every figure must carry an `asOf` date, and
+    anything not pulled in this run must say why. NEVER ship a report showing that banner - fix the
+    grade, the evidence or the provenance, not the check.
+
+  FRESHNESS (CONFIG.dataStatus):
+    Every run attempts its own pull. When a source is down, gated or timing out, the run does NOT
+    stop: fall down the ladder, and if nothing answers, reuse the most recent earlier figure and
+    mark it state:"carried" with its own `asOf` and a `why`. That raises an amber "Data notice" at
+    the top of the report and shows the figure as carried in the provenance table, so a reader can
+    never mistake it for something measured today. What is forbidden is silence: an undated figure,
+    or a stale one presented as current.
 
   RULES:
     - Every letter's `read` must be expressed ONLY in CAN SLIM terms, and cite the concrete
@@ -43,6 +53,8 @@
     - Here the scorecard DOES include M (7 rows) because this is a single stock's full
       evaluation - M is shown as the market-context row.
     - Keep CONFIG text ASCII where practical. Never put account-bound data in CONFIG.
+    - `dataStatus` is REQUIRED and its dates are part of the report, not metadata: `asOf` on every
+      item, `pulledAt` for the run, `why` on anything not fresh.
     - `essentials` is an OPTIONAL reference block (P/E, forward P/E, market cap, EPS,
       yield, beta, etc.). It is NOT part of the CAN SLIM grade - the method explicitly
       ignores P/E and valuation - so keep it clearly separate and never let it leak into a
@@ -113,6 +125,27 @@
   .audit h4{margin:0 0 6px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--fail)}
   .audit ul{margin:0;padding-left:18px} .audit li{margin:4px 0}
 
+  /* Freshness banner - amber, and deliberately NOT the red self-audit: a carried-over figure is
+     legitimate, it just has to be visible. Rendered whenever anything was not pulled this run. */
+  .freshbanner{background:var(--partial-bg);border:1px solid var(--partial);border-left:4px solid var(--partial);
+         border-radius:10px;padding:12px 15px;margin:16px 0 0;font-size:13.5px}
+  .freshbanner h4{margin:0 0 6px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--partial)}
+  .freshbanner ul{margin:0;padding-left:18px} .freshbanner li{margin:4px 0}
+
+  /* Data provenance - every figure, its source, and the date it is as of. */
+  .prov{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .prov table{width:100%;border-collapse:collapse;font-size:13px}
+  .prov th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);
+           font-weight:700;padding:9px 14px;border-bottom:1px solid var(--line)}
+  .prov td{padding:9px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+  .prov tr:last-child td{border-bottom:none}
+  .prov .src{color:var(--muted)} .prov .date{font-family:var(--mono);white-space:nowrap}
+  .prov .why{color:var(--muted);font-size:12px;margin-top:3px}
+  .tag{font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap}
+  .tag.t-fresh{background:var(--pass-bg);color:var(--pass)}
+  .tag.t-carried{background:var(--partial-bg);color:var(--partial)}
+  .tag.t-unavailable{background:var(--fail-bg);color:var(--fail)}
+
   .section-title{font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:24px 0 10px}
   .section-note{font-weight:400;text-transform:none;letter-spacing:0;opacity:.72;font-size:11px}
 
@@ -182,7 +215,7 @@
     *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
     body{background:var(--bg)}
     .wrap{max-width:none;padding:0}
-    .row,.verdict,.stat,.callout,.chartcard{break-inside:avoid}
+    .row,.verdict,.stat,.callout,.chartcard,.prov,.freshbanner{break-inside:avoid}
     a{color:inherit;text-decoration:none}
     .pc-cross{display:none}
     .hoveronly{display:none}   /* the crosshair readout is screen-only; the PDF has no hover */
@@ -208,6 +241,7 @@
   </header>
 
   <div id="audit"></div>
+  <div id="freshness"></div>
 
   <div class="verdict" id="verdict"></div>
 
@@ -224,6 +258,9 @@
 
   <div class="section-title" id="essentials-title">Company essentials <span class="section-note">&mdash; reference only, not a CAN SLIM input (the method ignores P/E &amp; valuation)</span></div>
   <div class="grid" id="essentials"></div>
+
+  <div class="section-title" id="prov-title">Data provenance <span class="section-note">&mdash; every figure, its source, and the date it is as of</span></div>
+  <div id="provenance"></div>
 
   <div class="section-title">If you act on it (per the method)</div>
   <div class="callout" id="buyplan"></div>
@@ -243,6 +280,26 @@ const CONFIG = {
   price: "$0.00",
   asOf: "YYYY-MM-DD (close)",
   dataSource: "IBKR + fundamentals",
+
+  // WHERE EVERY NUMBER CAME FROM, AND WHAT DATE IT IS AS OF. Required - the report banners its
+  // absence, renders the table below the buy plan, and puts an amber "Data notice" at the top the
+  // moment anything here is not `fresh`.
+  //   state: "fresh"       - pulled by a tool call made in THIS run
+  //          "carried"     - the pull failed and an earlier figure is being reused; `why` must say
+  //                          what failed and why the older number is still usable
+  //          "unavailable" - could not be sourced at all this run; `why` says what is missing
+  // Every item needs an `asOf` date. A carried figure is legitimate; an undated one is not.
+  dataStatus: {
+    pulledAt: "YYYY-MM-DD HH:MM TZ",   // when this run made its calls
+    items: [
+      // { label:"Price & volume (daily/weekly bars)", source:"TradingView get_ohlcv",
+      //   asOf:"2026-08-19 close", state:"fresh" },
+      // { label:"Quarterly & annual earnings (C, A)", source:"TradingView get_financial_history",
+      //   asOf:"FY26 Q4, reported 2026-08-05", state:"fresh" },
+      // { label:"Institutional sponsorship (I)", source:"MarketBeat", asOf:"2026-08-01",
+      //   state:"carried", why:"connector down this run; figure carried from the 2026-08-17 pull" },
+    ]
+  },
 
   // 52-week high. Required whenever entryStop.entry names a price: the report checks that any
   // proposed pivot sits in new-high ground rather than being a lower high with overhead supply.
@@ -572,6 +629,39 @@ if (ess.length){
     '<div class="stat"><div class="l">'+esc(s.l)+'</div><div class="v '+(s.tone||'')+'">'+esc(s.v)+'</div></div>').join('');
 } else { const et=$("essentials-title"); if(et) et.style.display='none'; }
 
+/* ---------- data provenance: every figure, its source, and the date it is as of ----------
+   A carried-over figure is allowed - a run that cannot reach a source should still produce a
+   grade - but it is never allowed to look like a fresh one. Anything not pulled this run raises
+   the amber banner at the top of the report. */
+(function provenance(){
+  const ds = CONFIG.dataStatus||{}, items = (ds.items||[]).filter(Boolean);
+  const host = $("provenance"), ttl = $("prov-title");
+  if (!items.length){ if(host) host.style.display='none'; if(ttl) ttl.style.display='none'; return; }
+  const STATE = {fresh:["t-fresh","pulled this run"], carried:["t-carried","carried over"],
+                 unavailable:["t-unavailable","unavailable"]};
+  host.innerHTML =
+    '<div class="prov"><table><thead><tr><th>Figure</th><th>Source</th><th>Data as of</th>'+
+    '<th>Status</th></tr></thead><tbody>'+
+    items.map(it=>{
+      const k = STATE[it.state] ? it.state : "unavailable";
+      return '<tr><td>'+esc(it.label)+(it.why?'<div class="why">'+esc(it.why)+'</div>':'')+'</td>'+
+             '<td class="src">'+esc(it.source||"-")+'</td>'+
+             '<td class="date">'+esc(it.asOf||"-")+'</td>'+
+             '<td><span class="tag '+STATE[k][0]+'">'+STATE[k][1]+'</span></td></tr>';
+    }).join('')+'</tbody></table></div>'+
+    (ds.pulledAt?'<div class="cnote">This run pulled its data at '+esc(ds.pulledAt)+'.</div>':'');
+
+  const stale = items.filter(it=>it.state!=="fresh");
+  if (stale.length){
+    $("freshness").innerHTML = '<div class="freshbanner"><h4>Data notice &mdash; '+stale.length+
+      ' figure'+(stale.length>1?'s':'')+' not pulled in this run</h4><ul>'+
+      stale.map(it=>'<li><b>'+esc(it.label)+'</b> &mdash; '+
+        (it.state==="unavailable" ? 'could not be sourced this run'
+                                  : 'carried from an earlier pull, as of '+esc(it.asOf||"an unstated date"))+
+        (it.why?': '+esc(it.why):'')+'</li>').join('')+'</ul></div>';
+  }
+})();
+
 const bp = CONFIG.buyPlan||{};
 $("buyplan").innerHTML = '<div>'+esc(bp.text||"")+'</div>'+
   ((bp.items||[]).length?'<ul>'+bp.items.map(i=>'<li>'+esc(i)+'</li>').join('')+'</ul>':'');
@@ -665,6 +755,32 @@ $("buyplan").innerHTML = '<div>'+esc(bp.text||"")+'</div>'+
         out.push("The stop is "+(d*100).toFixed(1)+"% below the entry; the rule is 7-8% (3% in a "+
                  "market correction).");
     }
+  }
+
+  // Provenance and dating. A run may fall back to an older figure, but the report has to say so
+  // and has to date it - an undated number cannot be checked by anyone reading the report later.
+  const DS = CONFIG.dataStatus||{}, dsItems = (DS.items||[]).filter(Boolean);
+  const STATES = ["fresh","carried","unavailable"];
+  if (!String(CONFIG.asOf||"").trim())
+    out.push("CONFIG.asOf is empty - the header has to date the grade (newest bar, close or intraday).");
+  if (!dsItems.length) {
+    out.push("CONFIG.dataStatus.items is empty. Every report must record, per figure, where it came "+
+             "from and the date it is as of - including anything carried over from an earlier pull.");
+  } else {
+    if (!String(DS.pulledAt||"").trim())
+      out.push("CONFIG.dataStatus.pulledAt is missing - state when this run made its calls.");
+    dsItems.forEach(it => {
+      const nm = String(it.label||"(unlabelled figure)");
+      if (!String(it.asOf||"").trim())
+        out.push(nm+" carries no `asOf` date. Every figure in the report has to state the date it "+
+                 "is as of, fresh or not.");
+      if (STATES.indexOf(it.state) < 0)
+        out.push(nm+' has state "'+String(it.state)+'" - it must be exactly "fresh", "carried" or '+
+                 '"unavailable".');
+      else if (it.state !== "fresh" && !String(it.why||"").trim())
+        out.push(nm+" is not fresh, so it needs a `why`: what failed in this run, and why the older "+
+                 "figure is still good enough to grade on.");
+    });
   }
 
   if (String(V.label||"").toUpperCase() === "BUY-RANGE") {

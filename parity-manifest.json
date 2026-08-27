@@ -7,11 +7,6 @@
   },
   "pending_port": [
     {
-      "commit": "0a902a6",
-      "summary": "Require a fresh data pull on every run",
-      "why": "Freshness policy is material: a screener ranking ideas off cached bars has the same defect as a grader. Port step 0, the data-guide freshness section, and the newest-bar / --stale-after check in chart_data.py (or its screener equivalent)."
-    },
-    {
       "commit": "e5a4425",
       "summary": "Grades must follow their evidence; strict pivot definition",
       "why": "Both the pass/partial/fail discipline and the pivot rule (sound base AND new-high ground; no pivot >~10% below the 52-week high) are scoring rules the screener applies too."

@@ -6,10 +6,11 @@ each letter **pass / partial / fail** and reach an overall verdict.
 
 ## Freshness rule (read first)
 
-**Every run pulls its own data.** Nothing below may be answered from a previous run, a previous
-session, or from earlier in the same conversation — re-call the tools each time, even for the same
-ticker minutes later, and rebuild the report from the new numbers. A "re-check" is a full re-run,
-not an edit of the last report. Concretely:
+**Every run attempts its own pull, and every figure in the report carries the date it is as of.**
+Nothing below may be silently answered from a previous run, a previous session, or from earlier in
+the same conversation — re-call the tools each time, even for the same ticker minutes later, and
+rebuild the report from the new numbers. A "re-check" is a full re-run, not an edit of the last
+report. Concretely:
 
 - Re-fetch the snapshot **and** the price history every run; regenerate `bars.json` / the
   `priceChart` block rather than reusing files on disk.
@@ -23,8 +24,25 @@ not an edit of the last report. Concretely:
   around it.
 - Re-pull fundamentals too. An earnings release between two runs can change C, A **and** the chart
   in one session (MSFT's FY26 Q4 landed overnight and moved the stock 16% the next morning).
-- If a source is unavailable this run, say so in the report and move down the ladder below —
-  never substitute a figure you remember from before.
+
+**When a source is down, gated, or timing out, the run continues — visibly.** Connectors drop
+mid-task and endpoints get plan-gated; a dated older figure beats refusing to grade. The order is:
+
+1. **Drop down the ladder below** and try the next source for that letter.
+2. **If nothing answers, reuse the most recent earlier figure** and record it in the report's
+   `CONFIG.dataStatus.items` as `state:"carried"`, with its own `asOf` date and a `why` naming
+   what failed. The dashboard then shows an amber **"Data notice"** at the top and tags that row
+   *carried over* in its provenance table.
+3. **If it cannot be sourced at all**, mark it `state:"unavailable"` with a `why` and grade the
+   letter on what you do have, saying in that letter's `read` what is missing.
+4. **Never present carried data as current**, and never carry the price series itself without
+   saying the grade is stale — the technical letters are measured against the newest bar.
+
+**Provenance is part of the report, not metadata.** `CONFIG.dataStatus` is required: `pulledAt`
+for the run, and one dated row per class of figure (price/volume, C & A earnings, ownership,
+essentials, market direction) with its source, its `asOf` and its state. The report's self-audit
+banners a missing `dataStatus`, any item without an `asOf`, and any non-fresh item without a
+`why` — so an undated or quietly-stale figure cannot ship.
 
 ## TradingView first (price/volume AND fundamentals in ~5 calls)
 

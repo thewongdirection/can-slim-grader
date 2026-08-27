@@ -70,27 +70,51 @@ fundamental source-priority ladder, and the pass/partial/fail rubric per letter.
 ## Workflow
 Work in order; keep the user informed.
 
-### 0 — Pull everything fresh, every single run
-**A grade is only as good as the moment it was measured.** Every number in the report must come
-from a tool call made *in this run*:
+### 0 — Pull fresh every run; if you can't, say so in the report and date what you used
+**A grade is only as good as the moment it was measured — and the report has to say when that
+was.** Two rules, and they work together:
 
-- **Never reuse** prices, bars, fundamentals, script output (`bars.json`, `chart.json`), or a filled
-  `<TICKER>-canslim.html` from an earlier run, an earlier session, or earlier in this conversation —
-  **even for the same ticker, even minutes later.** Re-call the tools and rebuild from scratch.
-  Prices move intraday, and a quarter can land between two runs.
+**Always attempt a fresh pull.** Every figure starts as a tool call made *in this run*:
+
+- **Re-call the tools every time.** Prices, bars, fundamentals, script output (`bars.json`,
+  `chart.json`) — rebuild from scratch, **even for the same ticker, even minutes later**. Prices
+  move intraday and a quarter can land between two runs.
 - **A re-check is a full re-run.** "Re-assess it", "is that still true?", "check MSFT again" means
   pull the data again and re-grade — never answer from the previous verdict, and never patch one
   figure into an old report.
-- **Overwrite the intermediates.** Write this run's bars/chart JSON fresh; never read whatever
-  happens to be on disk from last time.
-- **Timestamp from the data, not the wall clock.** Take the as-of from what the provider returned
-  (newest bar date, snapshot `ts`), and state whether it is a **close or intraday**, plus the feed
-  delay (IBKR quotes here are 15-minute delayed). An intraday grade is provisional — say so.
-- **Verify the newest bar is actually current** before publishing. `scripts/chart_data.py` prints
-  the newest bar date and warns when it is more than a few days old (`--stale-after`); a stale
-  newest bar means the *feed* is the problem, not the stock. Do not publish around it silently.
-- **If a source fails, say so in the report** and drop down the ladder in the data guide. Never
-  fill a gap with a remembered or previously-fetched number.
+- **Overwrite the intermediates.** Write this run's bars/chart JSON fresh; never silently read
+  whatever happens to be on disk from last time.
+- **Verify the newest bar is actually current.** `scripts/chart_data.py` prints the newest bar date
+  and warns when it is more than a few days old (`--stale-after`); a stale newest bar means the
+  *feed* is the problem, not the stock.
+
+**When a pull fails, the run does not stop — it gets honest.** A connector drops, an endpoint is
+plan-gated, a feed lags a session: that is normal, and a dated older figure beats no grade at all.
+In order:
+
+1. **Drop down the ladder** in the data guide and try the next source.
+2. **If nothing answers, reuse the most recent earlier figure you have** — from an earlier run or
+   earlier in this conversation — and record it in `CONFIG.dataStatus.items` as
+   `state:"carried"`, with its own `asOf` date and a `why` naming what failed. The report then
+   raises an amber **"Data notice"** at the top and tags the row *carried over* in the provenance
+   table, so nobody can mistake it for something measured today.
+3. **If it cannot be sourced at all**, mark it `state:"unavailable"` with a `why`, and grade the
+   letter on what you do have — saying in the letter's `read` what is missing.
+4. **Never let carried data pass for fresh, and never carry the whole grade.** If the *price
+   series* cannot be refreshed, the verdict is stale by definition: say so plainly in the chat
+   reply as well as the report, and treat the grade as provisional.
+
+**Date everything, from the data rather than the wall clock:**
+
+- `CONFIG.asOf` — the header date: the newest bar's date, and whether it is a **close or
+  intraday** (an intraday grade is provisional; say so).
+- `CONFIG.dataStatus.pulledAt` — when this run made its calls.
+- `CONFIG.dataStatus.items[]` — **one row per class of figure** (price/volume, C & A earnings,
+  ownership, essentials, market direction), each with its `source`, its own `asOf`, and its state.
+  This is required: the report's self-audit banners a missing `dataStatus`, an item with no
+  `asOf`, or a non-fresh item with no `why`.
+- Note the feed's own lag where it matters (IBKR quotes here are 15-minute delayed), and when two
+  connected feeds disagree about the newest bar, say which one the report used.
 
 ### 1 — Resolve the ticker
 TradingView: `search_symbols` → the `EXCHANGE:TICKER` id (e.g. `NASDAQ:WDC`); `get_financials`
@@ -182,6 +206,7 @@ has no buy point, and the honest entry is **"None now" plus the condition that w
 ### 6 — Deliver a PDF dashboard (default)
 1. **Fill the report.** Copy `assets/evaluation_template.html` to `<TICKER>-canslim.html` and
    fill the `CONFIG` object (the only thing you edit) — header (ticker/company/price/as-of),
+   **`dataStatus`** (required: `pulledAt` plus one dated row per class of figure — see step 0),
    `verdict` (label + tone + pass-weighted score /7 + one-line summary + buy point/stop), the
    `entryStop` band — **the prices the framework proposes: entry = the pivot buy point (buy up
    to ~5% past it), stop = 7-8% below entry (3% in a correction)**; give real prices when there

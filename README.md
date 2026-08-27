@@ -21,8 +21,12 @@ dashboard, use `ibkr-review-ticker`.
 ## What it does
 
 Every run pulls its own data — prices, volume and fundamentals are re-fetched on each invocation
-and the report is rebuilt from them. Nothing is carried over from a previous run, so asking again
-tomorrow (or ten minutes later) re-measures rather than repeating. For the ticker you name it:
+and the report is rebuilt from them, so asking again tomorrow (or ten minutes later) re-measures
+rather than repeating. When a source is down or gated the run doesn't stop: it falls down the
+source ladder, and if nothing answers it reuses the most recent earlier figure — **flagged as
+carried over, with its own date, in an amber notice at the top of the dashboard and in a
+provenance table listing every figure, its source and the date it is as of**. A stale number is
+allowed; an undated or silently stale one is not. For the ticker you name it:
 1. Assesses **market direction (M)** first (the gate).
 2. Pulls the stock's **live price/volume/52-week stats** (TradingView `get_ohlcv` +
    `get_symbol_data`, or IBKR) and computes relative strength,
@@ -38,7 +42,8 @@ tomorrow (or ten minutes later) re-measures rather than repeating. For the ticke
 4. **Grades each of C·A·N·S·L·I·M** pass / partial / fail against the method's thresholds, with
    the concrete numbers behind each grade — and the finished report **checks itself**, bannering
    any letter whose grade contradicts the evidence printed beside it, a buy point that isn't in
-   new-high ground, a score that doesn't add up, or a stop that isn't 7–8%.
+   new-high ground, a score that doesn't add up, a stop that isn't 7–8%, or a figure that arrived
+   without a date.
 5. Returns a **verdict** — BUY-RANGE (with pivot buy point + 7–8% stop), WATCH (what needs to
    happen), or AVOID (which letters it fails) — and never pretends high price strength alone
    makes a stock a buy without the earnings behind it.
