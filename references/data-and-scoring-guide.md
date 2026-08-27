@@ -261,8 +261,19 @@ Suggested rubric:
 - **M — Market direction.** PASS: confirmed uptrend. PARTIAL: uptrend under pressure. FAIL:
   correction/downtrend. (M is market-wide context, not stock-specific.)
 
-Count `pass` = 1, `partial` = 0.5, weight **C, A (earnings) and L (leadership)** most — they
-were the most predictive traits.
+### The total is always out of 7
+
+**One point per letter, seven letters, maximum 7.00.** `pass` = 1, `partial` = 0.5, `fail` = 0,
+summed across exactly C-A-N-S-L-I-M. The report computes this itself and renders `<tally> / 7`, so
+a typed figure cannot contradict the rows above it; the self-audit flags a `scoreText` that
+disagrees with the letters or that states any denominator other than 7. Never rescale — no /70,
+no percentages, no dropping M to score out of 6.
+
+**C, A and L weigh more in the verdict, not in the arithmetic.** They were the most predictive
+traits, so they gate the label rather than the number: BUY-RANGE requires C, A and L to pass with
+a valid N, and no total is high enough to earn it without them. A 5.5/7 built on a failing C is a
+WATCH or an AVOID, not a near-miss buy — which is precisely why the score is a summary of the
+seven rows and never the thing that decides the verdict.
 
 ## Overall verdict (one of)
 

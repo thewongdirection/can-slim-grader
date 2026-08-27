@@ -52,6 +52,9 @@
     - verdict.label is "BUY-RANGE" | "WATCH" | "AVOID"; verdict.tone is "up" | "pressure" | "down".
     - Here the scorecard DOES include M (7 rows) because this is a single stock's full
       evaluation - M is shown as the market-context row.
+    - THE TOTAL IS ALWAYS OUT OF 7: one point per letter, pass 1 / partial 0.5 / fail 0, across
+      exactly C A N S L I M. The page computes and renders it; never rescale the denominator.
+      C, A and L weigh more in the VERDICT (BUY-RANGE needs them to pass), not in the arithmetic.
     - Keep CONFIG text ASCII where practical. Never put account-bound data in CONFIG.
     - `dataStatus` is REQUIRED and its dates are part of the report, not metadata: `asOf` on every
       item, `pulledAt` for the run, `why` on anything not fresh.
@@ -308,7 +311,10 @@ const CONFIG = {
   verdict: {
     label: "WATCH",            // "BUY-RANGE" | "WATCH" | "AVOID"
     tone: "pressure",          // "up" | "pressure" | "down"
-    scoreText: "0 / 7",        // pass-weighted score out of 7
+    scoreText: "0 / 7",        // OPTIONAL cross-check. The page always DERIVES and shows
+                               // "<tally> / 7" from the seven letters (pass 1, partial 0.5,
+                               // fail 0). Fill it in and the audit tells you if your own
+                               // arithmetic disagreed; the denominator must be 7.
     summary: "One-line CAN SLIM read of the stock.",
     plan: "Buy point: - | Stop: -"
   },
@@ -413,11 +419,22 @@ $("co").textContent = CONFIG.company || "";
 $("px").textContent = CONFIG.price || "";
 $("meta").innerHTML = "As of " + esc(CONFIG.asOf||"") + "<br>" + esc(CONFIG.dataSource||"");
 
+/* THE SCORE IS ALWAYS OUT OF 7 - one point per letter, and the page works it out rather than
+   trusting a typed figure. pass = 1, partial = 0.5, fail = 0, across exactly the seven letters
+   C A N S L I M, so the maximum is 7.00 and nothing else can be displayed. C, A and L carry more
+   weight in the VERDICT (BUY-RANGE requires them), never in this arithmetic. */
+const SCORE = (function(){
+  const W = {pass:1, partial:0.5, fail:0};
+  const t = (CONFIG.letters||[]).reduce((a,x)=> a + (W[x && x.score] || 0), 0);
+  const tally = Math.round(t*100)/100;
+  return {tally: tally, denom: 7, text: (tally % 1 ? tally.toFixed(1) : String(tally)) + " / 7"};
+})();
+
 const v = CONFIG.verdict||{};
 $("verdict").className = "verdict " + esc(v.tone||"pressure");
 $("verdict").innerHTML =
   '<span class="badge">'+esc(v.label||"")+'</span>'+
-  '<span class="score">'+esc(v.scoreText||"")+'</span>'+
+  '<span class="score">'+esc(SCORE.text)+'</span>'+
   '<span class="sum">'+esc(v.summary||"")+'</span>'+
   (v.plan?'<span class="plan">'+esc(v.plan)+'</span>':'');
 
@@ -686,11 +703,21 @@ $("buyplan").innerHTML = '<div>'+esc(bp.text||"")+'</div>'+
     out.push(String(x.key||"?")+' has score "'+String(x.score)+'" - it must be exactly "pass", '+
              '"partial" or "fail", and is being counted as 0.'); });
 
-  const tally = L.reduce((a,x) => a + (WEIGHT[x.score] === undefined ? 0 : WEIGHT[x.score]), 0);
-  const stated = parseFloat(String(V.scoreText||"").replace(/[^0-9.]/g," ").trim().split(/\s+/)[0]);
+  // The rendered score is computed (SCORE), so a typo cannot reach the reader - but if CONFIG
+  // states one too, a disagreement means the author's own arithmetic was off and is worth saying.
+  const tally = SCORE.tally;
+  const nums = String(V.scoreText||"").replace(/[^0-9.]/g," ").trim().split(/\s+/).filter(x=>x!=="");
+  const stated = parseFloat(nums[0]);
+  const statedDenom = nums.length > 1 ? parseFloat(nums[1]) : null;
   if (isFinite(stated) && Math.abs(stated - tally) > 0.01)
     out.push("Verdict score reads \""+V.scoreText+"\" but the seven letters tally "+tally+
-             " / 7 (pass 1, partial 0.5, fail 0).");
+             " / 7 (pass 1, partial 0.5, fail 0). The report shows the computed figure.");
+  if (statedDenom !== null && isFinite(statedDenom) && Math.abs(statedDenom - 7) > 0.01)
+    out.push("Verdict score reads \""+V.scoreText+"\", but this scorecard is always out of 7 - "+
+             "one point per letter across C-A-N-S-L-I-M. Do not rescale it.");
+  if (tally > 7.001)
+    out.push("The letters tally "+tally+", which is above the 7-point maximum - there are more "+
+             "than seven rows, or a row is scored above one point.");
 
   // A letter graded PASS whose own threshold/actual/read concedes the bar was not met.
   const CONCEDES = [/just under/i, /just below/i, /just shy/i, /shy of/i, /falls? short/i,

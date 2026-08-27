@@ -156,9 +156,16 @@ growth fields break across a spin-off (WDC read -2.7% TTM revenue growth while e
 
 ### 4 — Score each letter
 Grade C, A, N, S, L, I, M **pass / partial / fail** against the thresholds in the methodology
-(rubric in the data guide). Weight the earnings letters (C, A) and leadership (L) most. Keep
-each letter's evidence concrete — cite the actual EPS/sales %, ROE, RS figure, base type, and %
-off high.
+(rubric in the data guide). Keep each letter's evidence concrete — cite the actual EPS/sales %,
+ROE, RS figure, base type, and % off high.
+
+**Every grade is scored out of 7 — one point per letter** (pass 1, partial 0.5, fail 0, across
+exactly the seven rows). The report derives that total and renders `<tally> / 7` itself, so you
+do not compute it and cannot mistype it; the self-audit flags any stated score that disagrees or
+any denominator other than 7. **Never rescale** the scorecard — the /70 rubric in
+`can-slim-recommend` belongs to the screener's dashboard, not here. The earnings letters (C, A)
+and leadership (L) weigh more in the **verdict**, not in the arithmetic: they gate BUY-RANGE, and
+no total earns that label without them.
 
 **The grade must follow mechanically from the threshold and the actual you printed beside it.**
 This is where a grade quietly inflates: strong company, impressive quarter, and the letter drifts
@@ -207,7 +214,8 @@ has no buy point, and the honest entry is **"None now" plus the condition that w
 1. **Fill the report.** Copy `assets/evaluation_template.html` to `<TICKER>-canslim.html` and
    fill the `CONFIG` object (the only thing you edit) — header (ticker/company/price/as-of),
    **`dataStatus`** (required: `pulledAt` plus one dated row per class of figure — see step 0),
-   `verdict` (label + tone + pass-weighted score /7 + one-line summary + buy point/stop), the
+   `verdict` (label + tone + one-line summary + buy point/stop — **the score is computed by the
+   report as `<tally> / 7` and needs no typing**), the
    `entryStop` band — **the prices the framework proposes: entry = the pivot buy point (buy up
    to ~5% past it), stop = 7-8% below entry (3% in a correction)**; give real prices when there
    is a valid pivot, else "None now" + the condition, the
