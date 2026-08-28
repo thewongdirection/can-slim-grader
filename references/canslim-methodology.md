@@ -86,7 +86,7 @@ Two ideas underpin everything:
 - **Relative Strength (RS):** buy stocks whose 12-month price performance beats **≥ 80%**
   (ideally 90%+) of the market. Big winners averaged an **RS ~87** before their major run.
   **Do not buy RS below ~70.** (This skill computes an RS *proxy* from price history — see
-  data-and-scoring-guide.md — since a true full-market 1–99 RS rating needs the whole market.)
+  each skill's data guide — since a true full-market 1–99 RS rating needs the whole market.)
 - **Avoid "sympathy plays"** — the cheaper laggard in the same group that never performs
   like the leader. "The first man gets the oyster; the second, the shell."
 - **Never buy on the way down** because it "looks cheap" (Cisco $82→$8, Crocs $75→$1, BofA
@@ -276,3 +276,23 @@ A candidate should satisfy as many as possible:
 21. Read the market daily; know tops and bottoms.
 22. Watch for buybacks (5–10%+) and new management.
 23. Don't buy at the bottom / on the way down / average down.
+
+## Scoring: pass / partial / fail, total out of 7
+Grade each letter **pass / partial / fail** against the thresholds above, and total them at
+**one point per letter — pass 1, partial 0.5, fail 0 — across C-A-N-S-L-I-M, maximum 7.00.**
+Both skills in this pair score on that scale, so a screened idea and a graded ticker mean the
+same thing; the dashboards compute the total themselves. Never rescale it.
+
+The grade for a letter follows mechanically from its threshold and the actual figure printed
+beside it: if the evidence concedes the bar was missed, the letter is not a pass, however
+impressive the story. Where a threshold says **each** ("EPS up each of the last 3 yrs at >=25%"),
+every period must clear it.
+
+**C, A and L weigh more in the verdict, not in the arithmetic.** They were the most predictive
+traits, so they gate the label rather than the number: a buy-range call needs C, A and L passing
+with a valid N, and no total earns it without them. Rough read of the total: **6-7** = leader in
+a strong tape; **4.5-5.5** = solid, buyable only on a proper pivot; **3-4** = watch, needs the
+market or a letter to improve; **under 3** = pass.
+
+Per-skill scoring detail (what counts as partial for each letter, and the verdict definitions)
+lives in each skill's own data guide, not here.

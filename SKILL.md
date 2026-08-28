@@ -162,8 +162,9 @@ ROE, RS figure, base type, and % off high.
 **Every grade is scored out of 7 — one point per letter** (pass 1, partial 0.5, fail 0, across
 exactly the seven rows). The report derives that total and renders `<tally> / 7` itself, so you
 do not compute it and cannot mistype it; the self-audit flags any stated score that disagrees or
-any denominator other than 7. **Never rescale** the scorecard — the /70 rubric in
-`can-slim-recommend` belongs to the screener's dashboard, not here. The earnings letters (C, A)
+any denominator other than 7. **Never rescale** the scorecard — `can-slim-recommend` now scores
+on the same /7 scale, so a screened idea and a graded ticker mean the same thing. The earnings
+letters (C, A)
 and leadership (L) weigh more in the **verdict**, not in the arithmetic: they gate BUY-RANGE, and
 no total earns that label without them.
 
@@ -277,10 +278,12 @@ of this document are meant to hold on both sides:
 | `scripts/relative_strength.py` | the RS proxy, % off high, base metrics, breakout volume |
 
 **These two are no longer byte-identical, and that is expected — port the CHANGE, not the file.**
-As of 2026-08 the sister carries screener-only additions on top of the shared substance: an extra
-0-10 grading rubric in the methodology (its dashboard scores /70 rather than pass/partial/fail)
-and a point-in-time `--asof` truncation mode in `relative_strength.py` (for historical screens).
-Copying either file wholesale would delete that work. Apply the same rule or the same maths to
+As of 2026-08 the sister carries screener-only additions on top of the shared substance: a
+"Modern refinements & professional practice" section in the methodology, and a point-in-time
+`--asof` truncation mode in `relative_strength.py` (for historical screens). Copying either file
+wholesale would delete that work. (The 0-10 / 70-point rubric that used to sit in its methodology
+is gone — both skills now score pass/partial/fail out of 7, and that rule lives in the shared
+file.) Apply the same rule or the same maths to
 the sister's version and leave its extensions intact. `check_parity.py` hashes **this** repo's
 copies, so it still tells you when a shared file moved here and owes a port.
 
