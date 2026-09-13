@@ -13,6 +13,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 import urllib.error
 import zipfile
@@ -87,6 +88,11 @@ class ArchiveReading(unittest.TestCase):
     def test_keeps_layout_when_there_is_no_wrapper(self):
         files = su.read_zip(make_zip({"SKILL.md": "x", "scripts/a.py": "y"}, wrapper=None))
         self.assertEqual(sorted(files), ["SKILL.md", "scripts/a.py"])
+
+    def test_a_shared_first_component_is_not_a_wrapper_without_the_marker(self):
+        # Every member under scripts/, and no scripts/SKILL.md - so scripts/ is real content.
+        files = su.read_zip(make_zip({"scripts/a.py": "y", "scripts/b.py": "z"}, wrapper=None))
+        self.assertEqual(sorted(files), ["scripts/a.py", "scripts/b.py"])
 
     def test_drops_ignored_and_traversing_members(self):
         blob = make_zip({"SKILL.md": "x", ".git/config": "no", "scripts/a.pyc": "no",
@@ -321,6 +327,22 @@ class GitMode(unittest.TestCase):
         self.assertEqual(read(self.clone, "SKILL.md"), "v2")
         self.assertEqual(read(self.clone, "NVDA-canslim.html"), "a report from an earlier run")
 
+    def test_the_caller_timeout_bounds_the_fetch_rather_than_a_longer_one(self):
+        self.publish()
+        seen = []
+        real_git = su.git
+
+        def record(root, *args, **kw):
+            seen.append((args, kw.get("timeout")))
+            return real_git(root, *args, **kw)
+
+        with mock.patch.object(su, "git", side_effect=record):
+            su.check(self.clone, repo=self.upstream, branch="main", timeout=7,
+                     apply_update=True)
+        network = [t for args, t in seen if args and args[0] in ("fetch", "merge")]
+        self.assertTrue(network)
+        self.assertTrue(all(t == 7 for t in network), seen)
+
     def test_no_stamp_is_written_for_a_git_install(self):
         self.publish()
         self.check(apply_update=True)
@@ -332,7 +354,7 @@ class Reporting(unittest.TestCase):
         res = {"root": "/skill", "repo": "o/r", "branch": "main", "mode": "git clone",
                "status": "current", "detail": "", "local": SHA, "upstream": SHA,
                "source": "github api", "dirty": False, "behind": None, "changed": [],
-               "new": [], "extra": [], "staged": None}
+               "new": [], "removed": [], "extra": [], "staged": None}
         res.update(kw)
         return res
 
@@ -437,10 +459,19 @@ class Staging(unittest.TestCase):
         self.assertNotEqual(first, second)
         self.assertEqual(read(second, "SKILL.md"), "v2")
 
-    def test_our_own_earlier_copies_are_cleared_rather_than_piling_up(self):
-        paths = [su.stage_tree({"SKILL.md": b"v%d" % i}) for i in range(3)]
-        self.assertEqual([p for p in paths[:-1] if os.path.exists(p)], [])
-        self.assertTrue(os.path.isdir(paths[-1]))
+    def test_a_copy_a_concurrent_run_is_still_reading_is_left_alone(self):
+        theirs = su.stage_tree({"SKILL.md": b"theirs"})
+        ours = su.stage_tree({"SKILL.md": b"ours"})
+        self.assertNotEqual(theirs, ours)
+        self.assertEqual(read(theirs, "SKILL.md"), "theirs")
+
+    def test_copies_left_by_older_runs_are_swept(self):
+        stale = su.stage_tree({"SKILL.md": b"last week"})
+        old = time.time() - su.STAGE_TTL - 60
+        os.utime(stale, (old, old))
+        fresh = su.stage_tree({"SKILL.md": b"now"})
+        self.assertFalse(os.path.exists(stale))
+        self.assertTrue(os.path.isdir(fresh))
 
     def test_a_symlink_wearing_our_prefix_is_never_followed_or_removed(self):
         victim = os.path.join(self.tmp, "victim")
@@ -483,6 +514,91 @@ class Staging(unittest.TestCase):
                            timeout=1, apply_update=True)
         self.assertEqual(res["status"], "blocked")
         self.assertEqual(read(root, "SKILL.md"), "old")
+
+
+class VendoredInstall(unittest.TestCase):
+    """The skill committed inside a bigger repo - dotfiles, a monorepo of skills."""
+
+    def setUp(self):
+        self.parent = tempfile.mkdtemp(prefix="self-update-vendor-")
+        self.addCleanup(shutil.rmtree, self.parent, True)
+        os.makedirs(os.path.join(self.parent, ".git"))
+        self.root = os.path.join(self.parent, "skills", "can-slim-grader")
+        os.makedirs(self.root)
+        write(self.root, "SKILL.md", "my customised copy")
+
+    def test_it_is_recognised_rather_than_taken_for_an_unpacked_install(self):
+        res = su.check(self.root, repo="o/r", branch="main", timeout=1,
+                       fetch=fake_fetch({"SKILL.md": "upstream"}))
+        self.assertIn("vendored in", res["mode"])
+        self.assertIn(os.path.realpath(self.parent), res["mode"])
+
+    def test_apply_rewrites_nothing_and_says_where_the_update_belongs(self):
+        res = su.check(self.root, repo="o/r", branch="main", timeout=1, apply_update=True,
+                       fetch=fake_fetch({"SKILL.md": "upstream"}))
+        self.assertEqual(res["status"], "blocked")
+        self.assertEqual(read(self.root, "SKILL.md"), "my customised copy")
+        self.assertFalse(os.path.exists(os.path.join(self.root, su.STAMP)))
+        self.assertIn("committed inside the repo at", res["detail"])
+        self.assertTrue(os.path.isfile(os.path.join(res["staged"], "SKILL.md")))
+        shutil.rmtree(res["staged"], True)
+
+    def test_a_vendored_copy_that_already_matches_is_current(self):
+        res = su.check(self.root, repo="o/r", branch="main", timeout=1, apply_update=True,
+                       fetch=fake_fetch({"SKILL.md": "my customised copy"}))
+        self.assertEqual(res["status"], "current")
+        self.assertFalse(os.path.exists(os.path.join(self.root, su.STAMP)))
+
+
+class RetiredFiles(TempRoot):
+    """Files upstream has deleted must not outlive the update that dropped them."""
+
+    def install(self, files):
+        for rel, body in files.items():
+            write(self.root, rel, body)
+        su.write_stamp(self.root, "o/r", "main", SHA, files)
+
+    def test_a_retired_file_is_listed_before_it_is_removed(self):
+        self.install({"SKILL.md": "v1", "references/old.md": "retired upstream"})
+        res = su.check(self.root, repo="o/r", branch="main", timeout=1,
+                       fetch=fake_fetch({"SKILL.md": "v2"}, sha=OTHER))
+        self.assertEqual(res["status"], "update-available")
+        self.assertEqual(res["removed"], ["references/old.md"])
+        self.assertIn("retired upstream", res["detail"])
+        self.assertTrue(os.path.isfile(os.path.join(self.root, "references", "old.md")))
+
+    def test_apply_removes_it_and_prunes_the_directory_it_emptied(self):
+        self.install({"SKILL.md": "v1", "references/old.md": "retired upstream"})
+        res = su.check(self.root, repo="o/r", branch="main", timeout=1, apply_update=True,
+                       fetch=fake_fetch({"SKILL.md": "v2"}, sha=OTHER))
+        self.assertEqual(res["status"], "updated")
+        self.assertEqual(res["removed"], ["references/old.md"])
+        self.assertFalse(os.path.exists(os.path.join(self.root, "references")))
+        self.assertEqual(read(self.root, "SKILL.md"), "v2")
+
+    def test_only_files_we_installed_are_ever_removed(self):
+        self.install({"SKILL.md": "v1"})
+        write(self.root, "NVDA-canslim.html", "a report")
+        write(self.root, "notes.md", "mine")
+        res = su.check(self.root, repo="o/r", branch="main", timeout=1, apply_update=True,
+                       fetch=fake_fetch({"SKILL.md": "v2"}, sha=OTHER))
+        self.assertEqual(res["removed"], [])
+        self.assertEqual(read(self.root, "NVDA-canslim.html"), "a report")
+        self.assertEqual(read(self.root, "notes.md"), "mine")
+
+    def test_a_stamp_naming_a_path_outside_the_install_is_ignored(self):
+        self.install({"SKILL.md": "v1"})
+        su.write_stamp(self.root, "o/r", "main", SHA,
+                       ["SKILL.md", "../escape.md", "/etc/passwd", ".git/config"])
+        res = su.check(self.root, repo="o/r", branch="main", timeout=1, apply_update=True,
+                       fetch=fake_fetch({"SKILL.md": "v2"}, sha=OTHER))
+        self.assertEqual(res["removed"], [])
+
+    def test_the_stamp_records_what_upstream_holds(self):
+        write(self.root, "SKILL.md", "v1")
+        su.check(self.root, repo="o/r", branch="main", timeout=1, apply_update=True,
+                 fetch=fake_fetch({"SKILL.md": "v2", "scripts/a.py": "x"}))
+        self.assertEqual(su.read_stamp(self.root)["files"], ["SKILL.md", "scripts/a.py"])
 
 
 if __name__ == "__main__":

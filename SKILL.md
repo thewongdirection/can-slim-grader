@@ -90,7 +90,7 @@ from the branch archive in a plain unpacked install — and prints a final `STAT
 | `current` | this copy is the published one | go to step 1 |
 | `updated` | a newer version was just installed | **re-read `SKILL.md` and both files in `references/` from disk before continuing** — what is in your context is the copy you started with, and it is now out of date. Then run the grade from step 1 under the new rules |
 | `update-available` | newer version found, nothing installed (the `--apply` flag was missing) | re-run with `--apply` |
-| `blocked` | a newer version exists but cannot be installed here: local edits, diverged git history, or a read-only install | continue on this copy, and say once in the chat reply that the grade ran on an older version and why. When the output names a staged directory, read the newer `SKILL.md` and `references/` from **there** and follow those rules for this run |
+| `blocked` | a newer version exists but cannot be installed here: local edits, diverged git history, a read-only install, a copy vendored inside a larger repo, or a write that failed partway | continue on this copy, and say once in the chat reply that the grade ran on an older version and why — and if the detail says the install is **part-updated**, say that too, because its files are a mix. When the output names a staged directory, read the newer `SKILL.md` and `references/` from **there** and follow those rules for this run |
 | `unknown` | the repo could not be reached (offline, rate-limited, no git) | continue on this copy and say so in the chat reply |
 
 - **Every invocation, no exceptions.** "Grade NVDA again", "re-check that" — a re-check is a full
@@ -100,9 +100,11 @@ from the branch archive in a plain unpacked install — and prints a final `STAT
   means carry on and report it. A dated grade from a slightly older copy beats no grade at all —
   the same rule as step 1's carried-over data, applied to the rules themselves.
 - **Don't hand-edit an installed copy.** In a plain unpacked install `--apply` replaces every file
-  that differs from upstream — that is the point of it. Keep changes in a git clone, where the
-  script refuses to touch a dirty or diverged tree, and read the parity section before changing
-  any rule.
+  that differs from upstream, and deletes the ones an earlier update installed that upstream has
+  since retired — that is the point of it. Keep changes in a git clone, where the script refuses to
+  touch a dirty or diverged tree, and read the parity section before changing any rule. A copy
+  committed inside a larger repo is never rewritten at all: the script says so and leaves the
+  update to that repo.
 - It touches **no user data**, and writes nothing outside this skill's own directory — with
   one exception: a read-only install, where it unpacks the newer copy into a temp directory
   and names the path so this run can follow the newer rules from there.

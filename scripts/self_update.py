@@ -11,13 +11,20 @@ being followed are the current ones.
   python scripts/self_update.py --apply    # check, and install it if there is
   python scripts/self_update.py --json     # same, machine-readable on stdout
 
-It handles both ways this skill gets installed:
+It handles every way this skill gets installed:
 
   git clone       - compares HEAD against the branch tip and fast-forwards. Never rebases,
-                    never touches a dirty or diverged worktree.
+                    never touches a dirty or diverged worktree. (A check fetches the branch
+                    into the object store when the commit is not already there; nothing in
+                    the working tree changes until --apply.)
   unpacked files  - no .git (a zip, a plugin directory): compares every file against the
-                    branch's zipball and rewrites only the ones that differ, recording the
-                    commit it installed in .skill-version so the next check is one API call.
+                    branch's archive and rewrites only the ones that differ, drops the ones
+                    an earlier run installed that upstream has since retired, and records
+                    the commit and file list in .skill-version so the next check is one
+                    API call.
+  vendored        - committed inside a LARGER repo (dotfiles, a monorepo of skills): read
+                    only. Rewriting it would clobber somebody's version-controlled files,
+                    so it reports where the update belongs and changes nothing.
 
 The last line of output is STATUS: <one of>
 
@@ -26,7 +33,8 @@ The last line of output is STATUS: <one of>
                     continuing, because what is in context is the old copy
   update-available  newer version found, check-only mode (no --apply)
   blocked           newer version found but not installable here (local edits, diverged
-                    history, read-only install) - carry on with this copy and say so
+                    history, a read-only or vendored install, or a write that failed
+                    partway) - carry on with this copy and say so
   unknown           could not reach the repo - carry on with this copy and say so
 
 Exit codes match: 0 current/updated, 10 update-available, 20 blocked, 30 unknown.
@@ -50,6 +58,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.parse
 import urllib.request
 import zipfile
@@ -67,8 +76,13 @@ IGNORE_DIRS = frozenset({".git", "__pycache__", ".mypy_cache", ".pytest_cache", 
 IGNORE_NAMES = frozenset({STAMP, ".DS_Store"})
 IGNORE_SUFFIXES = (".pyc", ".pyo")
 
+# The file that identifies a skill tree, and so the wrapper directory inside a GitHub archive.
+MARKER = "SKILL.md"
+
 # Staging directories are made with mkdtemp, so the prefix is only how we recognise our own.
+# Only ones older than this are swept: a fresher one belongs to a run still using it.
 STAGE_PREFIX = "can-slim-grader-upstream-"
+STAGE_TTL = 3600.0
 
 # Everything a fetch can fail with, including a body that is not the archive we asked for
 # (a proxy interstitial, an HTML error page, a truncated transfer).
@@ -125,22 +139,47 @@ def git(root, *args, timeout=TIMEOUT):
     return p.returncode, (p.stdout or "").strip()
 
 
-def git_state(root):
-    """Describe the checkout, or None when this install is not a git working tree.
+def enclosing_repo(root):
+    """Nearest directory at or above root holding a .git, or None.
 
-    A `.git` that git itself cannot read still returns a state (usable=False). Falling through
-    to None would send a real clone down the file-by-file path and overwrite committed work.
+    Walked by hand rather than asked of git, so vendoring is still detected when git is missing.
     """
-    if not os.path.exists(os.path.join(root, ".git")):
+    path = os.path.realpath(root)
+    while True:
+        if os.path.exists(os.path.join(path, ".git")):
+            return path
+        parent = os.path.dirname(path)
+        if parent == path:
+            return None
+        path = parent
+
+
+def git_state(root):
+    """Describe the checkout, or None when this install is under no git repository at all.
+
+    Three shapes matter, and the two unusable ones must still return a state: falling through
+    to None would send version-controlled files down the file-by-file path and overwrite
+    committed work.
+
+      usable            root is the top of its own clone - fast-forward it
+      usable=False      root has a .git that git cannot read - do nothing
+      vendored          root sits inside a LARGER repo (dotfiles, a monorepo of skills) - the
+                        files are committed somewhere we have no business rewriting
+    """
+    top = enclosing_repo(root)
+    if top is None:
         return None
+    if top != os.path.realpath(root):
+        return {"head": None, "dirty": None, "branch": None, "usable": False,
+                "vendored": True, "toplevel": top}
     rc, head = git(root, "rev-parse", "HEAD")
     if rc != 0 or not valid_sha(head):
-        return {"head": None, "dirty": None, "branch": None, "usable": False}
+        return {"head": None, "dirty": None, "branch": None, "usable": False, "vendored": False}
     # Tracked changes only: a report or a bars.json left in the directory is not a reason to
     # refuse the update for ever, and git itself refuses a fast-forward that would clobber one.
     _, porcelain = git(root, "status", "--porcelain", "--untracked-files=no")
     rc_b, branch = git(root, "rev-parse", "--abbrev-ref", "HEAD")
-    return {"head": head, "dirty": bool(porcelain), "usable": True,
+    return {"head": head, "dirty": bool(porcelain), "usable": True, "vendored": False,
             "branch": branch if rc_b == 0 else "?"}
 
 
@@ -222,10 +261,12 @@ def read_zip(blob):
     with zipfile.ZipFile(io.BytesIO(blob)) as z:
         members = [(safe_rel(i.filename), i) for i in z.infolist() if not i.is_dir()]
         members = [(rel, i) for rel, i in members if rel]
-        # GitHub wraps everything in <repo>-<ref>/. Strip it only when every entry shares it,
-        # so an archive laid out at the root still reads correctly.
+        # GitHub wraps everything in <repo>-<ref>/. Recognise that wrapper by what it holds -
+        # the skill's own SKILL.md - rather than by "everything shares a first component",
+        # which is also true of an unwrapped archive whose files all sit in one subdirectory.
+        names = {rel for rel, _ in members}
         tops = {rel.split("/")[0] for rel, _ in members}
-        strip = len(tops) == 1 and any("/" in rel for rel, _ in members)
+        strip = len(tops) == 1 and "%s/%s" % (next(iter(tops)), MARKER) in names
         for rel, info in members:
             if strip:
                 rel = rel.split("/", 1)[1] if "/" in rel else ""
@@ -256,6 +297,43 @@ def local_only(root, remote):
             rel = os.path.relpath(os.path.join(base, name), root).replace(os.sep, "/")
             if not ignored(rel) and rel not in remote:
                 yield rel
+
+
+def superseded(root, remote, installed):
+    """Files an earlier run installed that upstream has since deleted or renamed.
+
+    Only paths the stamp says we put there: leaving them would keep a retired reference file in
+    `references/`, which step 0 then tells the run to read. Everything else in the directory -
+    a report, a bars.json, a local note - is none of our business and is never removed.
+    """
+    stale = []
+    for rel in sorted(set(installed or ())):
+        if rel in remote or ignored(rel) or safe_rel(rel) != rel:
+            continue
+        if os.path.isfile(os.path.join(root, *rel.split("/"))):
+            stale.append(rel)
+    return stale
+
+
+def remove_tree(root, rels):
+    """Delete each path and any directory it leaves empty. (removed, failed)."""
+    removed, failed = [], []
+    for rel in rels:
+        path = os.path.join(root, *rel.split("/"))
+        try:
+            os.remove(path)
+            removed.append(rel)
+        except OSError as exc:
+            failed.append((rel, str(exc)))
+            continue
+        parent = os.path.dirname(path)
+        while os.path.realpath(parent) != os.path.realpath(root):
+            try:
+                os.rmdir(parent)
+            except OSError:
+                break
+            parent = os.path.dirname(parent)
+    return removed, failed
 
 
 def write_tree(root, remote, rels):
@@ -316,23 +394,26 @@ def clear_old_stages():
 
     Only ones we could have made ourselves: a real directory (never a symlink), owned by this
     user, still carrying mkdtemp's private mode. Anything else in /tmp wearing the same prefix
-    is somebody else's and is left untouched.
+    is somebody else's and is left untouched. And only ones older than STAGE_TTL - a directory
+    written minutes ago belongs to a run that was just told to read from it.
     """
     getuid = getattr(os, "getuid", None)
     if getuid is None:
         return
+    tmp = tempfile.gettempdir()
     try:
-        names = os.listdir(tempfile.gettempdir())
+        names = os.listdir(tmp)
     except OSError:
         return
+    cutoff = time.time() - STAGE_TTL
     for name in names:
         if not name.startswith(STAGE_PREFIX):
             continue
-        path = os.path.join(tempfile.gettempdir(), name)
+        path = os.path.join(tmp, name)
         try:
             info = os.lstat(path)
             if (stat.S_ISDIR(info.st_mode) and info.st_uid == getuid()
-                    and not info.st_mode & 0o077):
+                    and not info.st_mode & 0o077 and info.st_mtime < cutoff):
                 shutil.rmtree(path)
         except OSError:
             pass
@@ -347,7 +428,7 @@ def read_stamp(root):
         return None
 
 
-def write_stamp(root, repo, branch, sha):
+def write_stamp(root, repo, branch, sha, files=None):
     if not sha:
         return False
     payload = {
@@ -356,6 +437,7 @@ def write_stamp(root, repo, branch, sha):
         "commit": sha,
         "checked": _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "note": "Written by scripts/self_update.py; records the upstream commit this copy matches.",
+        "files": sorted(files) if files else [],
     }
     try:
         with open(os.path.join(root, STAMP), "w", encoding="utf-8") as f:
@@ -404,7 +486,7 @@ def check(root, repo=REPO, branch=BRANCH, timeout=TIMEOUT, apply_update=False,
         "root": root,
         "repo": repo,
         "branch": branch,
-        "mode": "git clone" if state else "unpacked files",
+        "mode": _mode(state),
         "status": "unknown",
         "detail": "",
         "local": state["head"] if state else None,
@@ -414,15 +496,25 @@ def check(root, repo=REPO, branch=BRANCH, timeout=TIMEOUT, apply_update=False,
         "behind": None,
         "changed": [],
         "new": [],
+        "removed": [],
         "extra": [],
         "staged": None,
     }
     res["upstream"], res["source"] = remote_sha(repo, branch, timeout, fetch=fetch)
-    if state:
+    if state and state.get("vendored"):
+        # Committed inside somebody else's repo: read-only, and say where the update belongs.
+        _check_files(res, root, timeout, apply_update, stamp, fetch, writable=False)
+    elif state:
         _check_git(res, root, state, timeout, apply_update)
     else:
         _check_files(res, root, timeout, apply_update, stamp, fetch)
     return res
+
+
+def _mode(state):
+    if not state:
+        return "unpacked files"
+    return "vendored in %s" % state["toplevel"] if state.get("vendored") else "git clone"
 
 
 def _check_git(res, root, state, timeout, apply_update):
@@ -439,12 +531,15 @@ def _check_git(res, root, state, timeout, apply_update):
         res["status"] = "current"
         res["detail"] = "HEAD is the %s tip" % branch
         return
-    net = max(timeout, 60.0)
-    rc, _ = git(root, "fetch", "--quiet", repo_url(res["repo"]), branch, timeout=net)
-    if rc != 0:
-        res["detail"] = ("upstream is at %s but this clone could not fetch it, so ahead/behind "
-                         "cannot be told apart" % sha[:7])
-        return
+    # Ahead or behind cannot be told apart without the commit itself. Fetch it only when it is
+    # not already in the object store, and keep to the caller's timeout rather than a longer one
+    # of our own: step 0 promises not to stall a grade.
+    if git(root, "cat-file", "-e", "%s^{commit}" % sha)[0] != 0:
+        rc, _ = git(root, "fetch", "--quiet", repo_url(res["repo"]), branch, timeout=timeout)
+        if rc != 0:
+            res["detail"] = ("upstream is at %s but this clone could not fetch it, so ahead or "
+                             "behind cannot be told apart" % sha[:7])
+            return
     if is_ancestor(root, sha, state["head"]):
         res["status"] = "current"
         res["detail"] = "this clone already contains the %s tip" % branch
@@ -463,7 +558,7 @@ def _check_git(res, root, state, timeout, apply_update):
         res["status"] = "blocked"
         res["detail"] = "the working tree has uncommitted changes - not fast-forwarding over them"
         return
-    rc, _ = git(root, "merge", "--ff-only", sha, timeout=net)
+    rc, _ = git(root, "merge", "--ff-only", sha, timeout=timeout)
     if rc != 0:
         res["status"] = "blocked"
         res["detail"] = "fast-forward to %s failed" % sha[:7]
@@ -473,10 +568,10 @@ def _check_git(res, root, state, timeout, apply_update):
     res["detail"] = "fast-forwarded to %s" % sha[:7]
 
 
-def _check_files(res, root, timeout, apply_update, stamp, fetch):
+def _check_files(res, root, timeout, apply_update, stamp, fetch, writable=True):
     repo, branch, sha = res["repo"], res["branch"], res["upstream"]
     recorded = read_stamp(root)
-    if stamp_matches(recorded, repo, branch, sha):
+    if writable and stamp_matches(recorded, repo, branch, sha):
         res["status"] = "current"
         res["local"] = sha
         res["detail"] = "%s records this copy at the %s tip" % (STAMP, branch)
@@ -498,17 +593,28 @@ def _check_files(res, root, timeout, apply_update, stamp, fetch):
         res["detail"] = "the %s archive came back with no usable files" % branch
         return
     res["changed"], res["new"], res["extra"] = diff_tree(root, remote)
+    res["removed"] = superseded(root, remote, (recorded or {}).get("files"))
     pending = res["changed"] + res["new"]
-    if not pending:
+    if not pending and not res["removed"]:
         res["status"] = "current"
         res["detail"] = "every file matches %s@%s" % (repo, branch)
-        if stamp:
-            write_stamp(root, repo, branch, sha)
+        if stamp and writable:
+            write_stamp(root, repo, branch, sha, remote)
+        return
+    if not writable:
+        res["status"] = "blocked"
+        res["staged"] = stage_tree(remote)
+        res["detail"] = ("this skill is committed inside the repo at %s - updating it here would "
+                         "rewrite version-controlled files, so nothing was changed; pull the "
+                         "newer version in that repo instead%s"
+                         % (res["mode"].split(" in ", 1)[-1], _staged_note(res["staged"])))
         return
     if not apply_update:
         res["status"] = "update-available"
-        res["detail"] = ("%d file(s) differ from upstream; re-run with --apply to install"
-                         % len(pending))
+        res["detail"] = ("%d file(s) differ from upstream%s; re-run with --apply to install"
+                         % (len(pending),
+                            " and %d are retired upstream" % len(res["removed"])
+                            if res["removed"] else ""))
         return
     blocker = unwritable(root, pending)
     if blocker:
@@ -526,11 +632,16 @@ def _check_files(res, root, timeout, apply_update, stamp, fetch):
                          % (len(written), len(pending), failed[0][0], failed[0][1],
                             _staged_note(res["staged"])))
         return
+    # Only ever the files an earlier run installed that upstream has since dropped.
+    res["removed"], _ = remove_tree(root, res["removed"])
     res["status"] = "updated"
     res["local"] = sha
-    res["detail"] = "installed %d file(s) from %s@%s" % (len(written), repo, branch)
+    res["detail"] = ("installed %d file(s) from %s@%s%s"
+                     % (len(written), repo, branch,
+                        ", removed %d retired upstream" % len(res["removed"])
+                        if res["removed"] else ""))
     if stamp:
-        write_stamp(root, repo, branch, sha)
+        write_stamp(root, repo, branch, sha, remote)
 
 
 def _staged_note(staged):
@@ -562,7 +673,8 @@ def render(res):
     ]
     if res["behind"]:
         lines.append("  behind    : %d commit(s)" % res["behind"])
-    for label, rels in (("changed", res["changed"]), ("new", res["new"])):
+    for label, rels in (("changed", res["changed"]), ("new", res["new"]),
+                        ("removed", res["removed"])):
         if rels:
             lines.append("  %-10s: %s" % (label, _listing(rels)))
     if res["detail"]:

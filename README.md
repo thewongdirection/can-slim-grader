@@ -78,7 +78,10 @@ allowed; an undated or silently stale one is not. For the ticker you name it:
 - `scripts/self_update.py` — the pre-flight the skill runs *before every grade*: it compares the
   installed copy against this repo's `main` and installs a newer one in place — a fast-forward in
   a git clone (never over uncommitted or diverged work), file-by-file from the branch archive in a
-  plain unpacked install. So a grade is always produced by the current thresholds and rules, not
+  plain unpacked install (retiring the files upstream has dropped), and never at all when the
+  skill is vendored inside a larger repo — there it says where the update belongs instead of
+  rewriting somebody's version-controlled files. So a grade is always produced by the current
+  thresholds and rules, not
   whichever copy happened to be installed. It reports `current` / `updated` / `update-available` /
   `blocked` / `unknown` and never blocks a run: if the repo is unreachable the grade still happens
   and says it ran on an older copy. Standard library only; run it yourself with
@@ -97,8 +100,9 @@ allowed; an undated or silently stale one is not. For the ticker you name it:
   Claude-specific parts (MCP connectors, `ToolSearch`, sibling skills). `--zip` also writes a zip
   of the raw files. Re-run it after any change so the portable copy doesn't drift.
 - `tests/` — regression tests for `scripts/self_update.py` (archive handling, the file-by-file
-  update, the git fast-forward and its refusals, the status/exit-code contract). Offline — no
-  network, no GitHub. Run with `python -m unittest discover -s tests`.
+  update and its retirements, the git fast-forward and its refusals, vendored installs, staging
+  safety, the status/exit-code contract). Offline — no network, no GitHub. Run with
+  `python -m unittest discover -s tests`.
 - `assets/evaluation_template.html` — the report: a self-contained single-stock CAN SLIM dashboard
   driven by a `CONFIG` object. **One file, two media** — dark on screen (the HTML deliverable),
   light on A4 with 15 mm margins in print (the PDF), handled by `@media print`. The candlestick chart is hand-rolled inline SVG — no chart library and no network
