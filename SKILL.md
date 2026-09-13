@@ -70,7 +70,44 @@ fundamental source-priority ladder, and the pass/partial/fail rubric per letter.
 ## Workflow
 Work in order; keep the user informed.
 
-### 0 — Pull fresh every run; if you can't, say so in the report and date what you used
+### 0 — Self-update: run the newest published version of this skill
+**Before the market check, before a single data call — make sure the copy of this skill you are
+about to follow is the newest one published.** The rules below get revised: thresholds, the
+pass/partial/fail rubric, what counts as a pivot, the guardrails. A grade produced from a stale
+copy is wrong in a way nobody can see in the output, because the report looks exactly the same.
+One command, every run:
+
+```bash
+python scripts/self_update.py --apply
+```
+
+It compares this install against **https://github.com/thewongdirection/can-slim-grader** (branch
+`main`), installs a newer version when there is one — a fast-forward in a git clone, file-by-file
+from the branch archive in a plain unpacked install — and prints a final `STATUS:` line. Act on it:
+
+| `STATUS:` | Means | Do this |
+|---|---|---|
+| `current` | this copy is the published one | go to step 1 |
+| `updated` | a newer version was just installed | **re-read `SKILL.md` and both files in `references/` from disk before continuing** — what is in your context is the copy you started with, and it is now out of date. Then run the grade from step 1 under the new rules |
+| `update-available` | newer version found, nothing installed (the `--apply` flag was missing) | re-run with `--apply` |
+| `blocked` | a newer version exists but cannot be installed here: local edits, diverged git history, or a read-only install | continue on this copy, and say once in the chat reply that the grade ran on an older version and why. When the output names a staged directory, read the newer `SKILL.md` and `references/` from **there** and follow those rules for this run |
+| `unknown` | the repo could not be reached (offline, rate-limited, no git) | continue on this copy and say so in the chat reply |
+
+- **Every invocation, no exceptions.** "Grade NVDA again", "re-check that" — a re-check is a full
+  re-run (step 1), and this step is part of it. It costs one small API call and short-circuits as
+  soon as the copy is confirmed current.
+- **It must never block the grade.** One attempt, a short timeout; anything other than `updated`
+  means carry on and report it. A dated grade from a slightly older copy beats no grade at all —
+  the same rule as step 1's carried-over data, applied to the rules themselves.
+- **Don't hand-edit an installed copy.** In a plain unpacked install `--apply` replaces every file
+  that differs from upstream — that is the point of it. Keep changes in a git clone, where the
+  script refuses to touch a dirty or diverged tree, and read the parity section before changing
+  any rule.
+- It touches **no user data**, and writes nothing outside this skill's own directory — with
+  one exception: a read-only install, where it unpacks the newer copy into a temp directory
+  and names the path so this run can follow the newer rules from there.
+
+### 1 — Pull fresh every run; if you can't, say so in the report and date what you used
 **A grade is only as good as the moment it was measured — and the report has to say when that
 was.** Two rules, and they work together:
 
@@ -116,20 +153,20 @@ In order:
 - Note the feed's own lag where it matters (IBKR quotes here are 15-minute delayed), and when two
   connected feeds disagree about the newest bar, say which one the report used.
 
-### 1 — Resolve the ticker
+### 2 — Resolve the ticker
 TradingView: `search_symbols` → the `EXCHANGE:TICKER` id (e.g. `NASDAQ:WDC`); `get_financials`
 returns the sector/industry. IBKR alternate: `search_contracts` → exact symbol, primary listing,
 `contract_id`, plus the stock's group (`get_company_themes`). If the user names a company rather
 than a symbol, resolve it.
 
-### 2 — Assess market direction (M)
+### 3 — Assess market direction (M)
 Pull SPY daily bars — `get_ohlcv("AMEX:SPY", interval="1D", count=300)`, or the IBKR/web
 equivalent — count distribution days (a close down >=0.2% on heavier volume than the session
 before) over the last ~25 sessions, and check the index against its 50- and 200-day. Classify
 Confirmed uptrend / Under pressure / Correction. M is market-wide context and one of the seven
 graded letters.
 
-### 3 — Gather the stock's data
+### 4 — Gather the stock's data
 Per `data-and-scoring-guide.md`. With TradingView that is five calls:
 `get_ohlcv(interval="1D", count=500)` and `get_ohlcv(interval="1W", count=104)` for the bars,
 `get_symbol_data` for the 52-week high/low, float and average volume,
@@ -154,7 +191,7 @@ street figure) and treat a wide GAAP/street gap as the earnings-quality check; a
 growth fields break across a spin-off (WDC read -2.7% TTM revenue growth while every quarter grew
 25-45%), so take growth from the per-period `yoy_pct`, never from TTM.
 
-### 4 — Score each letter
+### 5 — Score each letter
 Grade C, A, N, S, L, I, M **pass / partial / fail** against the thresholds in the methodology
 (rubric in the data guide). Keep each letter's evidence concrete — cite the actual EPS/sales %,
 ROE, RS figure, base type, and % off high.
@@ -185,7 +222,7 @@ up to PASS while its own evidence says the bar was missed. Specifically:
   a pivot below new-high ground, a stop that isn't 7-8%). **Never ship a report showing that
   banner** — fix the grade or fix the evidence. Do not delete the check.
 
-### 5 — Reach a verdict
+### 6 — Reach a verdict
 
 **What counts as a pivot** — get this wrong and the report invents a trade that the method would
 never take. A pivot exists only when **both** hold:
@@ -211,10 +248,10 @@ has no buy point, and the honest entry is **"None now" plus the condition that w
   or is a laggard near lows. Name the failing letters. Be explicit that high RS alone is not
   enough without earnings, and that a beaten-down "cheap" stock is a laggard the method avoids.
 
-### 6 — Deliver a PDF dashboard (default)
+### 7 — Deliver a PDF dashboard (default)
 1. **Fill the report.** Copy `assets/evaluation_template.html` to `<TICKER>-canslim.html` and
    fill the `CONFIG` object (the only thing you edit) — header (ticker/company/price/as-of),
-   **`dataStatus`** (required: `pulledAt` plus one dated row per class of figure — see step 0),
+   **`dataStatus`** (required: `pulledAt` plus one dated row per class of figure — see step 1),
    `verdict` (label + tone + one-line summary + buy point/stop — **the score is computed by the
    report as `<tally> / 7` and needs no typing**), the
    `entryStop` band — **the prices the framework proposes: entry = the pivot buy point (buy up
@@ -332,9 +369,13 @@ substance, adapt the framing.
   - `securities-filings-lookup` -> https://github.com/thewongdirection/securities-filings-lookup
 
 ## Guardrails
+- **Newest rules every run.** Self-update before anything else —
+  `python scripts/self_update.py --apply` — and when it reports `updated`, re-read `SKILL.md` and
+  `references/` before grading; when it cannot update, say in the chat reply that the grade ran on
+  an older copy. Never skip it on a repeat run. See step 0.
 - **Fresh data every run — no cached grades.** Re-pull price, volume and fundamentals on every
   invocation and rebuild the report from them; never reuse a prior run's figures or output file,
-  and never answer a follow-up from the previous verdict. See step 0.
+  and never answer a follow-up from the previous verdict. See step 1.
 - **Read-only, market data only.** From TradingView use only the read tools (`get_ohlcv`,
   `get_quote`, `get_financials`, `get_financial_history`, `get_earnings_history`,
   `get_symbol_data`, `search_symbols`, `get_technicals`, `get_news`). **Never** call its
@@ -365,6 +406,12 @@ substance, adapt the framing.
   EMA/SMA + 50-day average volume) from daily OHLCV bars. Accepts TradingView, IBKR, row-array
   or Polygon/Massive shapes; computes the averages over the full history and emits
   only the display window (default 300 sessions, so feed it ~500 bars). Pure standard library.
+- `scripts/self_update.py` — the step-0 pre-flight: compares this install against
+  `github.com/thewongdirection/can-slim-grader@main` and installs a newer version in place —
+  fast-forward in a git clone (never over a dirty or diverged tree), file-by-file from the branch
+  archive in an unpacked install, recording the commit in `.skill-version` so the next check is a
+  single API call. Reports `current` / `updated` / `update-available` / `blocked` / `unknown` and
+  never blocks a run. Pure standard library.
 - `scripts/check_parity.py` + `parity-manifest.json` — hashes the files shared verbatim with
   `can-slim-recommend` and reports drift since the last recorded sync. Run before committing any
   change to this skill; byte-level only, so material rule changes still need porting by hand.

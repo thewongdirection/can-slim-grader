@@ -78,7 +78,7 @@ IBKR/Massive for bars and over FMP for financials. Symbols are `EXCHANGE:TICKER`
 3. **TradingView has no institutional-ownership data.** **I** still comes from 13F/Form 4 via the
    ladder below (FMP `form13F`, `securities-filings-lookup`, or the web).
 4. **The newest bar is live while the session is open** — `get_ohlcv` returns a partial candle whose
-   close and volume are not final. Label the grade intraday and provisional (step 0).
+   close and volume are not final. Label the grade intraday and provisional (step 1).
 
 Cross-checked 2026-08: TradingView's `price_52_week_high` (799.87) and ROE (131.4%) matched the
 IBKR snapshot and the company's filings exactly, and its daily bars were **fresher than the IBKR

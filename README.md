@@ -20,7 +20,10 @@ dashboard, use `ibkr-review-ticker`.
 
 ## What it does
 
-Every run pulls its own data — prices, volume and fundamentals are re-fetched on each invocation
+Every run starts by updating the skill itself — it checks this repo for a newer version and
+installs it before grading anything, so a verdict is never produced by yesterday's thresholds
+(`scripts/self_update.py`; if the repo is unreachable the run continues and says which copy it
+used). Then it pulls its own data — prices, volume and fundamentals are re-fetched on each invocation
 and the report is rebuilt from them, so asking again tomorrow (or ten minutes later) re-measures
 rather than repeating. When a source is down or gated the run doesn't stop: it falls down the
 source ladder, and if nothing answers it reuses the most recent earlier figure — **flagged as
@@ -72,6 +75,14 @@ allowed; an undated or silently stale one is not. For the ticker you name it:
   Polygon-Massive shapes) into the report's `priceChart` block: candles for the display window plus the 50/200-day
   EMA (or SMA) computed over the *full* history and the 50-day average volume. Standard
   library only.
+- `scripts/self_update.py` — the pre-flight the skill runs *before every grade*: it compares the
+  installed copy against this repo's `main` and installs a newer one in place — a fast-forward in
+  a git clone (never over uncommitted or diverged work), file-by-file from the branch archive in a
+  plain unpacked install. So a grade is always produced by the current thresholds and rules, not
+  whichever copy happened to be installed. It reports `current` / `updated` / `update-available` /
+  `blocked` / `unknown` and never blocks a run: if the repo is unreachable the grade still happens
+  and says it ran on an older copy. Standard library only; run it yourself with
+  `python scripts/self_update.py` to see where you stand.
 - `scripts/check_parity.py` + `parity-manifest.json` — guards the shared methodology. This skill and
   `can-slim-recommend` share `references/canslim-methodology.md` and `scripts/relative_strength.py`,
   so any change to a threshold, a scoring rule, the pivot definition, the RS maths or
@@ -85,6 +96,9 @@ allowed; an undated or silently stale one is not. For the ticker you name it:
   a HOST NOTES preamble that says what data the host must supply and how to read the
   Claude-specific parts (MCP connectors, `ToolSearch`, sibling skills). `--zip` also writes a zip
   of the raw files. Re-run it after any change so the portable copy doesn't drift.
+- `tests/` — regression tests for `scripts/self_update.py` (archive handling, the file-by-file
+  update, the git fast-forward and its refusals, the status/exit-code contract). Offline — no
+  network, no GitHub. Run with `python -m unittest discover -s tests`.
 - `assets/evaluation_template.html` — the report: a self-contained single-stock CAN SLIM dashboard
   driven by a `CONFIG` object. **One file, two media** — dark on screen (the HTML deliverable),
   light on A4 with 15 mm margins in print (the PDF), handled by `@media print`. The candlestick chart is hand-rolled inline SVG — no chart library and no network
