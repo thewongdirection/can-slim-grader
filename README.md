@@ -86,6 +86,11 @@ allowed; an undated or silently stale one is not. For the ticker you name it:
   `blocked` / `unknown` and never blocks a run: if the repo is unreachable the grade still happens
   and says it ran on an older copy. Standard library only; run it yourself with
   `python scripts/self_update.py` to see where you stand.
+- `scripts/check_skill.py` — checks `SKILL.md` still imports as a skill: frontmatter shape, the
+  name grammar, the **1024-character** description cap, no angle-bracket text a Markdown or HTML
+  renderer would swallow as a tag, no CRLF/tab/BOM, and that every file it points at exists. Run
+  `python scripts/check_skill.py` (add `--strict` to fail on warnings too) before committing a
+  change to `SKILL.md`.
 - `scripts/check_parity.py` + `parity-manifest.json` — guards the shared methodology. This skill and
   `can-slim-recommend` share `references/canslim-methodology.md` and `scripts/relative_strength.py`,
   so any change to a threshold, a scoring rule, the pivot definition, the RS maths or
@@ -101,7 +106,8 @@ allowed; an undated or silently stale one is not. For the ticker you name it:
   of the raw files. Re-run it after any change so the portable copy doesn't drift.
 - `tests/` — regression tests for `scripts/self_update.py` (archive handling, the file-by-file
   update and its retirements, the git fast-forward and its refusals, vendored installs, staging
-  safety, the status/exit-code contract). Offline — no network, no GitHub. Run with
+  safety, the status/exit-code contract) and for `scripts/check_skill.py` (every rule it enforces,
+  plus this repo's own `SKILL.md`). Offline — no network, no GitHub. Run with
   `python -m unittest discover -s tests`.
 - `assets/evaluation_template.html` — the report: a self-contained single-stock CAN SLIM dashboard
   driven by a `CONFIG` object. **One file, two media** — dark on screen (the HTML deliverable),

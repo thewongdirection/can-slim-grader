@@ -38,8 +38,8 @@ INCLUDE = [
     ("assets/evaluation_template.html", "The report itself: fill CONFIG, it renders and audits itself"),
 ]
 # Repo housekeeping that means nothing outside this git repo.
-OMITTED = ["scripts/check_parity.py", "scripts/self_update.py", "parity-manifest.json",
-           "README.md", "tests/"]
+OMITTED = ["scripts/check_skill.py", "scripts/check_parity.py", "scripts/self_update.py",
+           "parity-manifest.json", "README.md", "tests/"]
 
 PREAMBLE = '''# can-slim-grader - portable bundle
 

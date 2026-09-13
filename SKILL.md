@@ -6,7 +6,7 @@ description: >-
   print-ready A4 PDF dashboard (dark-themed HTML on request). Use whenever the user wants to judge
   the QUALITY of one stock or whether a specific ticker is any good - "evaluate NVDA", "is TSLA a
   good stock", "rate AAPL", "does PLTR pass CAN SLIM", "grade this stock", "should I be interested
-  in MSFT", "is CRWD a buy", "how strong is <company>". Any publicly traded ticker; pulls live
+  in MSFT", "is CRWD a buy", "how strong is {company}". Any publicly traded ticker; pulls live
   price/volume and financials from TradingView (or Interactive Brokers / other connected sources /
   the web). The single-stock GRADING lens (one ticker in, one verdict) and sister skill of
   `can-slim-recommend` - for a ranked LIST of ideas use that; for a data-rich single-stock
@@ -199,7 +199,7 @@ Grade C, A, N, S, L, I, M **pass / partial / fail** against the thresholds in th
 ROE, RS figure, base type, and % off high.
 
 **Every grade is scored out of 7 — one point per letter** (pass 1, partial 0.5, fail 0, across
-exactly the seven rows). The report derives that total and renders `<tally> / 7` itself, so you
+exactly the seven rows). The report derives that total and renders `{tally} / 7` itself, so you
 do not compute it and cannot mistype it; the self-audit flags any stated score that disagrees or
 any denominator other than 7. **Never rescale** the scorecard — `can-slim-recommend` now scores
 on the same /7 scale, so a screened idea and a graded ticker mean the same thing. The earnings
@@ -251,11 +251,11 @@ has no buy point, and the honest entry is **"None now" plus the condition that w
   enough without earnings, and that a beaten-down "cheap" stock is a laggard the method avoids.
 
 ### 7 — Deliver a PDF dashboard (default)
-1. **Fill the report.** Copy `assets/evaluation_template.html` to `<TICKER>-canslim.html` and
+1. **Fill the report.** Copy `assets/evaluation_template.html` to `{TICKER}-canslim.html` and
    fill the `CONFIG` object (the only thing you edit) — header (ticker/company/price/as-of),
    **`dataStatus`** (required: `pulledAt` plus one dated row per class of figure — see step 1),
    `verdict` (label + tone + one-line summary + buy point/stop — **the score is computed by the
-   report as `<tally> / 7` and needs no typing**), the
+   report as `{tally} / 7` and needs no typing**), the
    `entryStop` band — **the prices the framework proposes: entry = the pivot buy point (buy up
    to ~5% past it), stop = 7-8% below entry (3% in a correction)**; give real prices when there
    is a valid pivot, else "None now" + the condition, the
@@ -269,7 +269,7 @@ has no buy point, and the honest entry is **"None now" plus the condition that w
 1b. **Build the daily chart** — candlesticks + 50/200-day EMA + volume for the **last 300
    sessions (~14 months)**, the window that makes a 200-day EMA meaningful. Never hand-transcribe
    bars; pipe the daily OHLCV you already pulled through the script:
-   `python scripts/chart_data.py <bars>.json --window 300 --marker <pivot>:Pivot:accent --js`
+   `python scripts/chart_data.py {bars}.json --window 300 --marker {pivot}:Pivot:accent --js`
    (it reads TradingView `get_ohlcv` responses, IBKR `get_price_history` responses,
    `[t,o,h,l,c,v]` rows, or Polygon/Massive `/v2/aggs` results) and paste its output as
    `CONFIG.priceChart`. **Feed it ≥500 daily bars** (`get_ohlcv count=500`, or IBKR
@@ -279,23 +279,23 @@ has no buy point, and the honest entry is **"None now" plus the condition that w
    and the 7-8% stop so the chart shows the same prices as the entry/stop band. If price data is
    unavailable, leave `bars` empty — the chart section hides itself — and say the chart was
    omitted for lack of data.
-2. **Render the PDF — this is the default deliverable.** The filled `<TICKER>-canslim.html` is the
+2. **Render the PDF — this is the default deliverable.** The filled `{TICKER}-canslim.html` is the
    working file (self-contained; **dark on screen, light on paper** — the template's `@media print`
    block swaps the palette and sets **A4 with a 15 mm margin**, so you never choose); the user gets
    the PDF:
-   `python scripts/html_to_pdf.py <TICKER>-canslim.html <TICKER>-canslim.pdf` (headless
+   `python scripts/html_to_pdf.py {TICKER}-canslim.html {TICKER}-canslim.pdf` (headless
    Chrome/Chromium/Edge → Playwright → WeasyPrint → wkhtmltopdf; it prints the engine used).
    **Re-read `CONFIG` against the self-audit rules before you export** — grade vs the evidence
    printed beside it, the score arithmetic, the pivot against `high52`, the 7-8% stop — because
    the PDF freezes whatever the page says and nobody will see the red banner in time. If you can
    view the rendered page, confirm it is absent. Hand over the PDF. If no PDF engine is available,
    say so and hand over the HTML instead — never block the grade on the export.
-3. **HTML on request only.** Give the `<TICKER>-canslim.html` file (and/or open it in the browser)
+3. **HTML on request only.** Give the `{TICKER}-canslim.html` file (and/or open it in the browser)
    when the user asks for the HTML, an interactive version, or the chart's hover readout — it is
    the same report, **rendered dark**, with a crosshair readout the PDF cannot carry. It renders
    itself from `CONFIG`; do not hand-edit the DOM. **Never re-theme the file to make the PDF dark
    or the HTML light** — the two media are meant to differ, and print CSS overrides any
-   `data-theme` anyway. `<html lang="en" data-theme="light">` only previews the printed palette on
+   `data-theme` anyway. setting `data-theme="light"` on the root element only previews the printed palette on
    screen.
 4. Keep the chat reply short: the verdict, the two or three letters that drove it, and the buy
    point/stop if actionable.
@@ -342,8 +342,9 @@ makes sense for one-ticker-in / one-verdict-out. The screener has its own output
 substance, adapt the framing.
 
 ### Procedure
-1. **Before committing, run `python scripts/check_parity.py`.** It hashes the shared files against
-   `parity-manifest.json` and names exactly what drifted.
+1. **Before committing, run `python scripts/check_skill.py` and
+   `python scripts/check_parity.py`.** The first refuses a `SKILL.md` that would not import; the
+   second hashes the shared files against `parity-manifest.json` and names exactly what drifted.
 2. If a shared file changed — or if you changed a rule in the material list above, **which the
    script cannot detect** — port the same change to
    **https://github.com/thewongdirection/can-slim-recommend**. Add the repo to the session first
@@ -414,6 +415,10 @@ substance, adapt the framing.
   archive in an unpacked install, recording the commit in `.skill-version` so the next check is a
   single API call. Reports `current` / `updated` / `update-available` / `blocked` / `unknown` and
   never blocks a run. Pure standard library.
+- `scripts/check_skill.py` — checks `SKILL.md` is importable: frontmatter shape, the name
+  grammar, the 1024-character description cap, no angle-bracket text a Markdown or HTML renderer
+  would eat as a tag, no CRLF/tab/BOM, and that every `references/` or `scripts/` path named here
+  actually exists. Run it before committing a change to this file. Pure standard library.
 - `scripts/check_parity.py` + `parity-manifest.json` — hashes the files shared verbatim with
   `can-slim-recommend` and reports drift since the last recorded sync. Run before committing any
   change to this skill; byte-level only, so material rule changes still need porting by hand.

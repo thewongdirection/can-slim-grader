@@ -19,7 +19,7 @@ report. Concretely:
   feed (TradingView included) — label the grade intraday and provisional. IBKR quotes here are
   **15-minute delayed**, and its history has been seen lagging TradingView's by a session:
   when two connected feeds disagree about the newest bar, say which one the report used.
-- `scripts/chart_data.py` prints `newest bar <date>` on every run and warns when it is older than
+- `scripts/chart_data.py` prints `newest bar {date}` on every run and warns when it is older than
   `--stale-after` days (default 4). A stale newest bar is a data problem — fix it, don't publish
   around it.
 - Re-pull fundamentals too. An earnings release between two runs can change C, A **and** the chart
@@ -201,7 +201,7 @@ the source ladder above.
    takes TradingView's `{t,o,h,l,c,v}` dicts and IBKR-style `[t,o,h,l,c,v]` rows interchangeably —
    **paste the provider payload in as-is; never retype bars.**
 4. **Chart for the report:** run `scripts/chart_data.py` on the same daily bars —
-   `python scripts/chart_data.py bars.json --window 300 --marker <pivot>:Pivot:accent --js` — and
+   `python scripts/chart_data.py bars.json --window 300 --marker {pivot}:Pivot:accent --js` — and
    paste the result as `CONFIG.priceChart` in the dashboard (daily candles + 50/200-day EMA +
    volume for the last **300 sessions ≈ 14 months**). It takes a TradingView `get_ohlcv` response
    as-is, or the IBKR response as-is, or `[t,o,h,l,c,v]` rows, or Polygon/Massive `/v2/aggs`
@@ -264,7 +264,7 @@ Suggested rubric:
 ### The total is always out of 7
 
 **One point per letter, seven letters, maximum 7.00.** `pass` = 1, `partial` = 0.5, `fail` = 0,
-summed across exactly C-A-N-S-L-I-M. The report computes this itself and renders `<tally> / 7`, so
+summed across exactly C-A-N-S-L-I-M. The report computes this itself and renders `{tally} / 7`, so
 a typed figure cannot contradict the rows above it; the self-audit flags a `scoreText` that
 disagrees with the letters or that states any denominator other than 7. Never rescale — no /70,
 no percentages, no dropping M to score out of 6.
