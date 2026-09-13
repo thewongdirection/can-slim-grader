@@ -15,6 +15,11 @@
       "commit": "f0c1c55",
       "summary": "50-day average volume excludes the latest bar",
       "why": "Only the chart_data side changed here, but the screener must use the same volume basis as relative_strength.breakout_volume wherever it reports a volume surge."
+    },
+    {
+      "commit": "d5c77c0",
+      "summary": "Self-update before every run; the grade states which copy of the rules produced it",
+      "why": "A freshness rule aimed at the rules themselves, and a new guardrail: a screener running last month's thresholds is wrong the same way a grader is. The mechanism is grader-only (scripts/self_update.py points at this repo), so port the step and the guardrail with the sister's own repo, not the file."
     }
   ]
 }
