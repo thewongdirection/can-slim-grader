@@ -22,10 +22,17 @@ import os
 import sys
 import shutil
 import subprocess
+from pathlib import Path
 
 
 def _abs(p):
     return os.path.abspath(p)
+
+
+def _file_url(p):
+    """Canonical file:// URL for a path: correct slash count on POSIX and Windows,
+    and percent-encoding so paths with spaces don't silently break the load."""
+    return Path(_abs(p)).as_uri()
 
 
 def find_browser():
@@ -60,7 +67,7 @@ def via_chrome(inp, out):
     exe = find_browser()
     if not exe:
         return False
-    url = "file:///" + _abs(inp).replace("\\", "/")
+    url = _file_url(inp)
     common = [exe, "--disable-gpu", "--no-sandbox",
               "--run-all-compositor-stages-before-draw", "--virtual-time-budget=4000",
               f"--print-to-pdf={_abs(out)}", url]
@@ -89,7 +96,7 @@ def via_playwright(inp, out):
     except Exception:
         return False
     try:
-        url = "file:///" + _abs(inp).replace("\\", "/")
+        url = _file_url(inp)
         with sync_playwright() as p:
             b = p.chromium.launch()
             pg = b.new_page()
