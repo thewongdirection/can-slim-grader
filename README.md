@@ -72,6 +72,18 @@ allowed; an undated or silently stale one is not. For the ticker you name it:
   Polygon-Massive shapes) into the report's `priceChart` block: candles for the display window plus the 50/200-day
   EMA (or SMA) computed over the *full* history and the 50-day average volume. Standard
   library only.
+- `scripts/tv_throttle.py` — keeps the run under TradingView's rate limit. TradingView publishes
+  no limit for these endpoints and refuses rather than warns (`{"success": false,
+  "rate_limited": true, ...}`, wrapping a 403 from the scanner), so the ceiling is **discovered
+  each run**: a sliding-window budget hard-bounded at **100 requests/minute** — 80/min
+  connector-wide out of the box (48/min per endpoint), since it spends 80% of whatever limit is
+  believed — kept **per endpoint**, because the
+  scanner and the chart service are limited separately (observed: `get_symbol_data` refused while
+  `get_ohlcv` answered in the same second). A refusal halves that endpoint's ceiling and cools it
+  down; a clean stretch creeps it back up; the learned ceiling persists between runs. Standard
+  library only.
+- `tests/` — regression tests (`python3 -m unittest discover -s tests`), standard library, no
+  pytest.
 - `scripts/check_parity.py` + `parity-manifest.json` — guards the shared methodology. This skill and
   `can-slim-recommend` share `references/canslim-methodology.md` and `scripts/relative_strength.py`,
   so any change to a threshold, a scoring rule, the pivot definition, the RS maths or
@@ -93,7 +105,8 @@ allowed; an undated or silently stale one is not. For the ticker you name it:
 
 ## Requirements
 - **TradingView MCP** (`Trading_View`) — preferred: bars *and* financials in one connector,
-  read-only tools only (the skill never touches TradingView portfolios or watchlists).
+  read-only tools only (the skill never touches TradingView portfolios or watchlists), and every
+  call paced by `scripts/tv_throttle.py` under the limit the run discovers.
 - IBKR MCP connector or Massive Market Data as the price/volume alternate (read-only; never trades).
 - Fundamental-data connectors and/or web search for anything the above don't carry — notably
   institutional sponsorship.

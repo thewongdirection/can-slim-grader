@@ -15,6 +15,11 @@
       "commit": "f0c1c55",
       "summary": "50-day average volume excludes the latest bar",
       "why": "Only the chart_data side changed here, but the screener must use the same volume basis as relative_strength.breakout_volume wherever it reports a volume surge."
+    },
+    {
+      "commit": "1d21fe8",
+      "summary": "TradingView calls are paced under a discovered rate limit (scripts/tv_throttle.py)",
+      "why": "The screener sweeps sector by sector, so it spends far more TradingView calls than a single-ticker grade and hits the limit first. It needs the same discipline: the 100/min hard bound, the per-endpoint backoff (scanner and chart are limited separately), and checking every response for a refusal instead of assuming a documented limit that TradingView does not publish."
     }
   ]
 }

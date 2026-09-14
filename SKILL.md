@@ -55,6 +55,9 @@ fundamental source-priority ladder, and the pass/partial/fail rubric per letter.
   consensus, beat rate, next report date, post-earnings price reaction), `get_financials` (ROE,
   margins, debt/equity, market cap), `get_symbol_data` (52-week high/low, float, average volume).
   Symbols are `EXCHANGE:TICKER`. Tools are deferred — load with `ToolSearch` first.
+  **Every TradingView call goes through `scripts/tv_throttle.py`** — TradingView publishes no
+  rate limit and refuses rather than warns, so the ceiling is discovered, not looked up. See
+  step 0a.
 - **Alternates for price/volume** (N/S/L/M) when TradingView is not connected: the **IBKR MCP
   connector** (read-only market data; 52-week stats + the stock's group) or **Massive Market
   Data** (Polygon-style `/v2/aggs` bars). Both feed `scripts/relative_strength.py` too.
@@ -115,6 +118,48 @@ In order:
   `asOf`, or a non-fresh item with no `why`.
 - Note the feed's own lag where it matters (IBKR quotes here are 15-minute delayed), and when two
   connected feeds disagree about the newest bar, say which one the report used.
+
+### 0a — Check TradingView's limit, then pace every call under it
+**A refused call is a letter you cannot grade**, and TradingView refuses rather than warns: the
+connector answers `{"success": false, "rate_limited": true, ...}` (seen wrapping an HTTP 403 from
+`scanner.tradingview.com`) and there is no budget field on a *successful* response to pace off.
+So the limit is **discovered every run**, and `scripts/tv_throttle.py` holds the run to it —
+never more than **100 requests/minute**, and by default well under that.
+
+**Check the limit first — in this order, and never raise the ceiling on a guess:**
+1. `python3 scripts/tv_throttle.py status` — the budget carried over from earlier runs, including
+   any lower ceiling a refusal already taught it. Start here every run.
+2. **Read the responses you are already getting** for a limit TradingView advertises: any
+   `rate_limited`, `retry_after`, or `limit`/`remaining`/`reset` field. As of the last check the
+   connector sets only `rate_limited`, but a newer build may publish a real number — check
+   `server_version` and the tool descriptions when one looks likely.
+3. **If a number is actually established** — advertised by the server, documented by TradingView,
+   or given by the user — adopt it:
+   `python3 scripts/tv_throttle.py set-limit --family scanner --per-minute <N> --source "<where>"`.
+   It is clamped to the 100/min bound, and the throttle spends 80% of it. **Found nothing? Keep
+   the default.** An undocumented limit is not an excuse to go faster.
+
+**Then pace the run:**
+- Before each call or batch: `python3 scripts/tv_throttle.py wait --tool <tool_name>` — it blocks
+  until a slot is free, records the call, and gives up (exit 3) rather than stalling the run past
+  `--max-wait`, which is your cue to use the source ladder instead. A batch bigger than one
+  window is refused outright (exit 4): split it, and `plan --calls <n>` says where the split is.
+- After each call: pipe the response to
+  `python3 scripts/tv_throttle.py observe --tool <tool_name> -`. **This is the "always check"
+  half** — it reads the response for a refusal, halves that endpoint's ceiling, and cools it down
+  for the server's `retry_after` (else 30s→60s→120s→300s). A plain error (a bad symbol) is not a
+  refusal and must not slow the run down. `wait` spends the call and `observe` only learns from
+  it, so the pair counts each call once — `observe --record` is only for a call made without
+  `wait` first.
+- **Limits are per endpoint, so back off per endpoint.** `get_symbol_data` and `get_quote` were
+  refused in one observed check while `get_ohlcv` answered in the same second — the scanner and
+  the chart service are limited separately. The throttle backs off only the family that was
+  refused; do not stop pulling bars because the scanner is sulking.
+- **On a refusal, never fabricate the figure** (the connector's own error says as much). Wait out
+  the cooldown, retry **once**, then drop down the source ladder in the data guide and record the
+  row in `CONFIG.dataStatus.items` as `carried`/`unavailable` with a `why` naming the rate limit.
+  A single-ticker grade is only ~6-8 TradingView calls, so a run that gets throttled is telling
+  you something real about the connector, not about your pacing.
 
 ### 1 — Resolve the ticker
 TradingView: `search_symbols` → the `EXCHANGE:TICKER` id (e.g. `NASDAQ:WDC`); `get_financials`
@@ -335,6 +380,13 @@ substance, adapt the framing.
 - **Fresh data every run — no cached grades.** Re-pull price, volume and fundamentals on every
   invocation and rebuild the report from them; never reuse a prior run's figures or output file,
   and never answer a follow-up from the previous verdict. See step 0.
+- **Never outrun the data provider.** Every TradingView call is paced by
+  `scripts/tv_throttle.py` and stays **below 100 requests/minute** — under whatever lower limit
+  the run discovers. Check the limit before the first call, feed every response back with
+  `observe`, and back off the refused endpoint rather than the whole connector (step 0a). Massive
+  keeps its own, much tighter **≤5 calls/min** limit — see the data guide. **A rate-limited call
+  is never answered from memory or invention**: fall down the source ladder and date what you
+  used.
 - **Read-only, market data only.** From TradingView use only the read tools (`get_ohlcv`,
   `get_quote`, `get_financials`, `get_financial_history`, `get_earnings_history`,
   `get_symbol_data`, `search_symbols`, `get_technicals`, `get_news`). **Never** call its
@@ -365,6 +417,14 @@ substance, adapt the framing.
   EMA/SMA + 50-day average volume) from daily OHLCV bars. Accepts TradingView, IBKR, row-array
   or Polygon/Massive shapes; computes the averages over the full history and emits
   only the display window (default 300 sessions, so feed it ~500 bars). Pure standard library.
+- `scripts/tv_throttle.py` — paces TradingView calls under a **discovered** rate limit: a
+  per-endpoint sliding-window budget hard-bounded at 100 req/min (spending 80% of whatever limit
+  is believed), which halves and cools down the refused endpoint on a `rate_limited` response and
+  creeps back up after it stays clean. Learned ceilings persist between runs in a state file
+  (`$TV_THROTTLE_STATE`, else `$XDG_STATE_HOME/can-slim/tv_throttle.json`). Pure standard library.
+- `tests/test_tv_throttle.py` — regression tests for the throttle (budget bound, per-endpoint
+  backoff, refusal detection, recovery, state handling, CLI exit codes). Run with
+  `python3 -m unittest discover -s tests`.
 - `scripts/check_parity.py` + `parity-manifest.json` — hashes the files shared verbatim with
   `can-slim-recommend` and reports drift since the last recorded sync. Run before committing any
   change to this skill; byte-level only, so material rule changes still need porting by hand.
