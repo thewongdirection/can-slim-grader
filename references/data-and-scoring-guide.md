@@ -19,7 +19,7 @@ report. Concretely:
   feed (TradingView included) — label the grade intraday and provisional. IBKR quotes here are
   **15-minute delayed**, and its history has been seen lagging TradingView's by a session:
   when two connected feeds disagree about the newest bar, say which one the report used.
-- `scripts/chart_data.py` prints `newest bar <date>` on every run and warns when it is older than
+- `scripts/chart_data.py` prints `newest bar {date}` on every run and warns when it is older than
   `--stale-after` days (default 4). A stale newest bar is a data problem — fix it, don't publish
   around it.
 - Re-pull fundamentals too. An earnings release between two runs can change C, A **and** the chart
@@ -78,7 +78,7 @@ IBKR/Massive for bars and over FMP for financials. Symbols are `EXCHANGE:TICKER`
 3. **TradingView has no institutional-ownership data.** **I** still comes from 13F/Form 4 via the
    ladder below (FMP `form13F`, `securities-filings-lookup`, or the web).
 4. **The newest bar is live while the session is open** — `get_ohlcv` returns a partial candle whose
-   close and volume are not final. Label the grade intraday and provisional (step 0).
+   close and volume are not final. Label the grade intraday and provisional (step 1).
 
 Cross-checked 2026-08: TradingView's `price_52_week_high` (799.87) and ROE (131.4%) matched the
 IBKR snapshot and the company's filings exactly, and its daily bars were **fresher than the IBKR
@@ -99,12 +99,12 @@ adjusted from what actually happens**, and `scripts/tv_throttle.py` enforces it.
 | **On a refusal** | that endpoint's ceiling is **halved** (floor 5/min) and it cools down for the server's `retry_after`, else 30s → 60s → 120s → 300s. Only the refused endpoint backs off. |
 | **Recovery** | after 20 *observed-clean* calls and 2 quiet minutes the ceiling creeps back +5/min, never above that lane's established ceiling (the 60/min default unless `set-limit` raised it). Learned ceilings persist between runs. |
 
-The loop, per call: `wait --tool <name>` → make the call → `observe --tool <name> -` with the
+The loop, per call: `wait --tool {name}` → make the call → `observe --tool {name} -` with the
 response. `observe` is what keeps the limit current — it distinguishes a real refusal (the
 server's `rate_limited` flag, a 429, "too many requests") from a plain error like a bad symbol,
 which must **not** slow the run down. If a limit is ever actually established — advertised by a
 newer server build, documented by TradingView, or given by the user — record it with
-`set-limit --family <lane> --per-minute <N> --source "<where>"` and every budget re-derives from
+`set-limit --family {lane} --per-minute {N} --source "{where}"` and every budget re-derives from
 it. Never raise the ceiling on a guess.
 
 **A rate-limited call is a missing figure, not a guessable one.** Wait out the cooldown, retry
@@ -235,7 +235,7 @@ the source ladder above.
    takes TradingView's `{t,o,h,l,c,v}` dicts and IBKR-style `[t,o,h,l,c,v]` rows interchangeably —
    **paste the provider payload in as-is; never retype bars.**
 4. **Chart for the report:** run `scripts/chart_data.py` on the same daily bars —
-   `python scripts/chart_data.py bars.json --window 300 --marker <pivot>:Pivot:accent --js` — and
+   `python scripts/chart_data.py bars.json --window 300 --marker {pivot}:Pivot:accent --js` — and
    paste the result as `CONFIG.priceChart` in the dashboard (daily candles + 50/200-day EMA +
    volume for the last **300 sessions ≈ 14 months**). It takes a TradingView `get_ohlcv` response
    as-is, or the IBKR response as-is, or `[t,o,h,l,c,v]` rows, or Polygon/Massive `/v2/aggs`
@@ -298,7 +298,7 @@ Suggested rubric:
 ### The total is always out of 7
 
 **One point per letter, seven letters, maximum 7.00.** `pass` = 1, `partial` = 0.5, `fail` = 0,
-summed across exactly C-A-N-S-L-I-M. The report computes this itself and renders `<tally> / 7`, so
+summed across exactly C-A-N-S-L-I-M. The report computes this itself and renders `{tally} / 7`, so
 a typed figure cannot contradict the rows above it; the self-audit flags a `scoreText` that
 disagrees with the letters or that states any denominator other than 7. Never rescale — no /70,
 no percentages, no dropping M to score out of 6.

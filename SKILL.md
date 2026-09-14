@@ -3,15 +3,15 @@ name: can-slim-grader
 description: >-
   Grade a single specified stock ticker against the CAN SLIM growth-investing model and return a
   letter-by-letter (C-A-N-S-L-I-M) scorecard with a BUY-RANGE / WATCH / AVOID verdict, as a
-  print-ready A4 PDF dashboard (a dark-themed HTML version on request). Use whenever the user wants to judge the
-  QUALITY of one stock or whether a specific ticker is any good — "evaluate NVDA", "is TSLA a good
-  stock", "rate AAPL", "does PLTR pass CAN SLIM", "grade this stock", "should I be interested in
-  MSFT", "is CRWD a buy", "how strong is <company>". Works for any publicly traded ticker; pulls
-  live price/volume and financials from TradingView (or Interactive Brokers / other connected
-  financial-data sources / the web). This is the single-stock GRADING lens (one ticker in, one verdict) and the
-  sister skill of `can-slim-recommend` — for a ranked LIST of screened ideas use
-  `can-slim-recommend`; for a data-rich single-stock dashboard use `ibkr-review-ticker`. Analysis
-  and decision support, never personalized investment advice and never trading.
+  print-ready A4 PDF dashboard (dark-themed HTML on request). Use whenever the user wants to judge
+  the QUALITY of one stock or whether a specific ticker is any good - "evaluate NVDA", "is TSLA a
+  good stock", "rate AAPL", "does PLTR pass CAN SLIM", "grade this stock", "should I be interested
+  in MSFT", "is CRWD a buy", "how strong is {company}". Any publicly traded ticker; pulls live
+  price/volume and financials from TradingView (or Interactive Brokers / other connected sources /
+  the web). The single-stock GRADING lens (one ticker in, one verdict) and sister skill of
+  `can-slim-recommend` - for a ranked LIST of ideas use that; for a data-rich single-stock
+  dashboard use `ibkr-review-ticker`. Decision support, never personalized investment advice and
+  never trading.
 ---
 
 # can-slim-grader — grade one ticker against CAN SLIM
@@ -57,7 +57,7 @@ fundamental source-priority ladder, and the pass/partial/fail rubric per letter.
   Symbols are `EXCHANGE:TICKER`. Tools are deferred — load with `ToolSearch` first.
   **Every TradingView call goes through `scripts/tv_throttle.py`** — TradingView publishes no
   rate limit and refuses rather than warns, so the ceiling is discovered, not looked up. See
-  step 0a.
+  step 2.
 - **Alternates for price/volume** (N/S/L/M) when TradingView is not connected: the **IBKR MCP
   connector** (read-only market data; 52-week stats + the stock's group) or **Massive Market
   Data** (Polygon-style `/v2/aggs` bars). Both feed `scripts/relative_strength.py` too.
@@ -73,7 +73,46 @@ fundamental source-priority ladder, and the pass/partial/fail rubric per letter.
 ## Workflow
 Work in order; keep the user informed.
 
-### 0 — Pull fresh every run; if you can't, say so in the report and date what you used
+### 0 — Self-update: run the newest published version of this skill
+**Before the market check, before a single data call — make sure the copy of this skill you are
+about to follow is the newest one published.** The rules below get revised: thresholds, the
+pass/partial/fail rubric, what counts as a pivot, the guardrails. A grade produced from a stale
+copy is wrong in a way nobody can see in the output, because the report looks exactly the same.
+One command, every run:
+
+```bash
+python scripts/self_update.py --apply
+```
+
+It compares this install against **https://github.com/thewongdirection/can-slim-grader** (branch
+`main`), installs a newer version when there is one — a fast-forward in a git clone, file-by-file
+from the branch archive in a plain unpacked install — and prints a final `STATUS:` line. Act on it:
+
+| `STATUS:` | Means | Do this |
+|---|---|---|
+| `current` | this copy is the published one | go to step 1 |
+| `updated` | a newer version was just installed | **re-read `SKILL.md` and both files in `references/` from disk before continuing** — what is in your context is the copy you started with, and it is now out of date. Then run the grade from step 1 under the new rules |
+| `update-available` | newer version found, nothing installed (the `--apply` flag was missing) | re-run with `--apply` |
+| `blocked` | a newer version exists but cannot be installed here: local edits, diverged git history, a read-only install, a copy vendored inside a larger repo, or a write that failed partway | continue on this copy, and say once in the chat reply that the grade ran on an older version and why — and if the detail says the install is **part-updated**, say that too, because its files are a mix. When the output names a staged directory, read the newer `SKILL.md` and `references/` from **there** and follow those rules for this run |
+| `unknown` | the repo could not be reached (offline, rate-limited, no git) | continue on this copy and say so in the chat reply |
+
+- **Every invocation, no exceptions.** "Grade NVDA again", "re-check that" — a re-check is a full
+  re-run (step 1), and this step is part of it. It costs one small API call and short-circuits as
+  soon as the copy is confirmed current.
+- **It must never block the grade.** One attempt, a short timeout; anything other than `updated`
+  means carry on and report it. A dated grade from a slightly older copy beats no grade at all —
+  the same rule as step 1's carried-over data, applied to the rules themselves.
+- **Don't hand-edit an installed copy.** In a plain unpacked install `--apply` replaces every file
+  that differs from upstream, and deletes the ones an earlier update installed that upstream has
+  since retired — that is the point of it. Keep changes in a git clone, where the script refuses to
+  touch a dirty or diverged tree, and read the parity section before changing any rule. A copy
+  committed inside a larger repo is never rewritten at all: the script says so and leaves the
+  update to that repo.
+- It touches **no user data**, and writes nothing outside this skill's own directory — with
+  one exception: a read-only install, where it unpacks the newer copy into a temp directory
+  and names the path so this run can follow the newer rules from there.
+
+### 1 — Pull fresh every run; if you can't, say so in the report and date what you used
 **A grade is only as good as the moment it was measured — and the report has to say when that
 was.** Two rules, and they work together:
 
@@ -119,62 +158,50 @@ In order:
 - Note the feed's own lag where it matters (IBKR quotes here are 15-minute delayed), and when two
   connected feeds disagree about the newest bar, say which one the report used.
 
-### 0a — Check TradingView's limit, then pace every call under it
-**A refused call is a letter you cannot grade**, and TradingView refuses rather than warns: the
-connector answers `{"success": false, "rate_limited": true, ...}` (seen wrapping an HTTP 403 from
-`scanner.tradingview.com`) and there is no budget field on a *successful* response to pace off.
-So the limit is **discovered every run**, and `scripts/tv_throttle.py` holds the run to it —
-never more than **100 requests/minute**, and by default well under that.
+### 2 — Check TradingView's limit, then pace every call under it
+TradingView publishes no rate limit and **refuses rather than warns** — `{"success": false,
+"rate_limited": true, ...}`, and a *successful* response carries no budget to pace off. So the
+limit is discovered every run and `scripts/tv_throttle.py` holds the run under it: never more
+than **100 requests/minute**, and by default well below. Full rules in the data guide.
 
-**Check the limit first — in this order, and never raise the ceiling on a guess:**
-1. `python3 scripts/tv_throttle.py status` — the budget carried over from earlier runs, including
-   any lower ceiling a refusal already taught it. Start here every run.
-2. **Read the responses you are already getting** for a limit TradingView advertises: any
-   `rate_limited`, `retry_after`, or `limit`/`remaining`/`reset` field. As of the last check the
-   connector sets only `rate_limited`, but a newer build may publish a real number — check
-   `server_version` and the tool descriptions when one looks likely.
-3. **If a number is actually established** — advertised by the server, documented by TradingView,
-   or given by the user — adopt it:
-   `python3 scripts/tv_throttle.py set-limit --family scanner --per-minute <N> --source "<where>"`.
-   It is clamped to the 100/min bound, and the throttle spends 80% of it. **Found nothing? Keep
-   the default.** An undocumented limit is not an excuse to go faster.
+**Establish the limit, and never raise the ceiling on a guess:**
+1. `python3 scripts/tv_throttle.py status` — the budget carried over, including any lower ceiling
+   a refusal already taught it. Start here every run.
+2. Check the responses you are already getting for a limit TradingView advertises (`rate_limited`,
+   `retry_after`, `limit`/`remaining`/`reset`). Today it sets only `rate_limited`.
+3. Adopt a number only if one is actually established — advertised, documented, or given by the
+   user: `set-limit --family scanner --per-minute {N} --source "{where}"`. Otherwise keep the
+   default; an undocumented limit is not licence to go faster.
 
-**Then pace the run:**
-- Before each call or batch: `python3 scripts/tv_throttle.py wait --tool <tool_name>` — it blocks
-  until a slot is free, records the call, and gives up (exit 3) rather than stalling the run past
-  `--max-wait`, which is your cue to use the source ladder instead. A batch bigger than one
-  window is refused outright (exit 4): split it, and `plan --calls <n>` says where the split is.
-- After each call: pipe the response to
-  `python3 scripts/tv_throttle.py observe --tool <tool_name> -`. **This is the "always check"
-  half** — it reads the response for a refusal, halves that endpoint's ceiling, and cools it down
-  for the server's `retry_after` (else 30s→60s→120s→300s). A plain error (a bad symbol) is not a
-  refusal and must not slow the run down. `wait` spends the call and `observe` only learns from
-  it, so the pair counts each call once — `observe --record` is only for a call made without
-  `wait` first.
-- **Limits are per endpoint, so back off per endpoint.** `get_symbol_data` and `get_quote` were
-  refused in one observed check while `get_ohlcv` answered in the same second — the scanner and
-  the chart service are limited separately. The throttle backs off only the family that was
-  refused; do not stop pulling bars because the scanner is sulking.
-- **On a refusal, never fabricate the figure** (the connector's own error says as much). Wait out
-  the cooldown, retry **once**, then drop down the source ladder in the data guide and record the
-  row in `CONFIG.dataStatus.items` as `carried`/`unavailable` with a `why` naming the rate limit.
-  A single-ticker grade is only ~6-8 TradingView calls, so a run that gets throttled is telling
-  you something real about the connector, not about your pacing.
+**Then pace every call:** `wait --tool {tool_name}` → make the call → pipe the response to
+`observe --tool {tool_name} -`. **`observe` is the "always check" half**: it reads the response
+for a refusal and re-derives the ceiling from it. `wait` spends the call and `observe` only
+learns from it, so the pair counts each call once. `wait` gives up rather than stalling the run
+(exit 3 — use the source ladder); a batch bigger than one window is refused outright (exit 4 —
+split it, `plan --calls {n}` says where).
 
-### 1 — Resolve the ticker
+- **Back off per endpoint, not per connector.** `get_symbol_data` and `get_quote` were refused in
+  one observed check while `get_ohlcv` answered in the same second. Don't stop pulling bars
+  because the scanner is sulking.
+- **On a refusal, never fabricate the figure.** Wait out the cooldown, retry **once**, then drop
+  down the source ladder and record the row in `CONFIG.dataStatus.items` as
+  `carried`/`unavailable` with a `why` naming the rate limit. A grade is only ~6-8 TradingView
+  calls, so being throttled says something real about the connector, not about your pacing.
+
+### 3 — Resolve the ticker
 TradingView: `search_symbols` → the `EXCHANGE:TICKER` id (e.g. `NASDAQ:WDC`); `get_financials`
 returns the sector/industry. IBKR alternate: `search_contracts` → exact symbol, primary listing,
 `contract_id`, plus the stock's group (`get_company_themes`). If the user names a company rather
 than a symbol, resolve it.
 
-### 2 — Assess market direction (M)
+### 4 — Assess market direction (M)
 Pull SPY daily bars — `get_ohlcv("AMEX:SPY", interval="1D", count=300)`, or the IBKR/web
 equivalent — count distribution days (a close down >=0.2% on heavier volume than the session
 before) over the last ~25 sessions, and check the index against its 50- and 200-day. Classify
 Confirmed uptrend / Under pressure / Correction. M is market-wide context and one of the seven
 graded letters.
 
-### 3 — Gather the stock's data
+### 5 — Gather the stock's data
 Per `data-and-scoring-guide.md`. With TradingView that is five calls:
 `get_ohlcv(interval="1D", count=500)` and `get_ohlcv(interval="1W", count=104)` for the bars,
 `get_symbol_data` for the 52-week high/low, float and average volume,
@@ -199,13 +226,13 @@ street figure) and treat a wide GAAP/street gap as the earnings-quality check; a
 growth fields break across a spin-off (WDC read -2.7% TTM revenue growth while every quarter grew
 25-45%), so take growth from the per-period `yoy_pct`, never from TTM.
 
-### 4 — Score each letter
+### 6 — Score each letter
 Grade C, A, N, S, L, I, M **pass / partial / fail** against the thresholds in the methodology
 (rubric in the data guide). Keep each letter's evidence concrete — cite the actual EPS/sales %,
 ROE, RS figure, base type, and % off high.
 
 **Every grade is scored out of 7 — one point per letter** (pass 1, partial 0.5, fail 0, across
-exactly the seven rows). The report derives that total and renders `<tally> / 7` itself, so you
+exactly the seven rows). The report derives that total and renders `{tally} / 7` itself, so you
 do not compute it and cannot mistype it; the self-audit flags any stated score that disagrees or
 any denominator other than 7. **Never rescale** the scorecard — `can-slim-recommend` now scores
 on the same /7 scale, so a screened idea and a graded ticker mean the same thing. The earnings
@@ -230,7 +257,7 @@ up to PASS while its own evidence says the bar was missed. Specifically:
   a pivot below new-high ground, a stop that isn't 7-8%). **Never ship a report showing that
   banner** — fix the grade or fix the evidence. Do not delete the check.
 
-### 5 — Reach a verdict
+### 7 — Reach a verdict
 
 **What counts as a pivot** — get this wrong and the report invents a trade that the method would
 never take. A pivot exists only when **both** hold:
@@ -256,12 +283,12 @@ has no buy point, and the honest entry is **"None now" plus the condition that w
   or is a laggard near lows. Name the failing letters. Be explicit that high RS alone is not
   enough without earnings, and that a beaten-down "cheap" stock is a laggard the method avoids.
 
-### 6 — Deliver a PDF dashboard (default)
-1. **Fill the report.** Copy `assets/evaluation_template.html` to `<TICKER>-canslim.html` and
+### 8 — Deliver a PDF dashboard (default)
+1. **Fill the report.** Copy `assets/evaluation_template.html` to `{TICKER}-canslim.html` and
    fill the `CONFIG` object (the only thing you edit) — header (ticker/company/price/as-of),
-   **`dataStatus`** (required: `pulledAt` plus one dated row per class of figure — see step 0),
+   **`dataStatus`** (required: `pulledAt` plus one dated row per class of figure — see step 1),
    `verdict` (label + tone + one-line summary + buy point/stop — **the score is computed by the
-   report as `<tally> / 7` and needs no typing**), the
+   report as `{tally} / 7` and needs no typing**), the
    `entryStop` band — **the prices the framework proposes: entry = the pivot buy point (buy up
    to ~5% past it), stop = 7-8% below entry (3% in a correction)**; give real prices when there
    is a valid pivot, else "None now" + the condition, the
@@ -275,7 +302,7 @@ has no buy point, and the honest entry is **"None now" plus the condition that w
 1b. **Build the daily chart** — candlesticks + 50/200-day EMA + volume for the **last 300
    sessions (~14 months)**, the window that makes a 200-day EMA meaningful. Never hand-transcribe
    bars; pipe the daily OHLCV you already pulled through the script:
-   `python scripts/chart_data.py <bars>.json --window 300 --marker <pivot>:Pivot:accent --js`
+   `python scripts/chart_data.py {bars}.json --window 300 --marker {pivot}:Pivot:accent --js`
    (it reads TradingView `get_ohlcv` responses, IBKR `get_price_history` responses,
    `[t,o,h,l,c,v]` rows, or Polygon/Massive `/v2/aggs` results) and paste its output as
    `CONFIG.priceChart`. **Feed it ≥500 daily bars** (`get_ohlcv count=500`, or IBKR
@@ -285,23 +312,23 @@ has no buy point, and the honest entry is **"None now" plus the condition that w
    and the 7-8% stop so the chart shows the same prices as the entry/stop band. If price data is
    unavailable, leave `bars` empty — the chart section hides itself — and say the chart was
    omitted for lack of data.
-2. **Render the PDF — this is the default deliverable.** The filled `<TICKER>-canslim.html` is the
+2. **Render the PDF — this is the default deliverable.** The filled `{TICKER}-canslim.html` is the
    working file (self-contained; **dark on screen, light on paper** — the template's `@media print`
    block swaps the palette and sets **A4 with a 15 mm margin**, so you never choose); the user gets
    the PDF:
-   `python scripts/html_to_pdf.py <TICKER>-canslim.html <TICKER>-canslim.pdf` (headless
+   `python scripts/html_to_pdf.py {TICKER}-canslim.html {TICKER}-canslim.pdf` (headless
    Chrome/Chromium/Edge → Playwright → WeasyPrint → wkhtmltopdf; it prints the engine used).
    **Re-read `CONFIG` against the self-audit rules before you export** — grade vs the evidence
    printed beside it, the score arithmetic, the pivot against `high52`, the 7-8% stop — because
    the PDF freezes whatever the page says and nobody will see the red banner in time. If you can
    view the rendered page, confirm it is absent. Hand over the PDF. If no PDF engine is available,
    say so and hand over the HTML instead — never block the grade on the export.
-3. **HTML on request only.** Give the `<TICKER>-canslim.html` file (and/or open it in the browser)
+3. **HTML on request only.** Give the `{TICKER}-canslim.html` file (and/or open it in the browser)
    when the user asks for the HTML, an interactive version, or the chart's hover readout — it is
    the same report, **rendered dark**, with a crosshair readout the PDF cannot carry. It renders
    itself from `CONFIG`; do not hand-edit the DOM. **Never re-theme the file to make the PDF dark
    or the HTML light** — the two media are meant to differ, and print CSS overrides any
-   `data-theme` anyway. `<html lang="en" data-theme="light">` only previews the printed palette on
+   `data-theme` anyway. setting `data-theme="light"` on the root element only previews the printed palette on
    screen.
 4. Keep the chat reply short: the verdict, the two or three letters that drove it, and the buy
    point/stop if actionable.
@@ -348,8 +375,9 @@ makes sense for one-ticker-in / one-verdict-out. The screener has its own output
 substance, adapt the framing.
 
 ### Procedure
-1. **Before committing, run `python scripts/check_parity.py`.** It hashes the shared files against
-   `parity-manifest.json` and names exactly what drifted.
+1. **Before committing, run `python scripts/check_skill.py` and
+   `python scripts/check_parity.py`.** The first refuses a `SKILL.md` that would not import; the
+   second hashes the shared files against `parity-manifest.json` and names exactly what drifted.
 2. If a shared file changed — or if you changed a rule in the material list above, **which the
    script cannot detect** — port the same change to
    **https://github.com/thewongdirection/can-slim-recommend**. Add the repo to the session first
@@ -377,13 +405,17 @@ substance, adapt the framing.
   - `securities-filings-lookup` -> https://github.com/thewongdirection/securities-filings-lookup
 
 ## Guardrails
+- **Newest rules every run.** Self-update before anything else —
+  `python scripts/self_update.py --apply` — and when it reports `updated`, re-read `SKILL.md` and
+  `references/` before grading; when it cannot update, say in the chat reply that the grade ran on
+  an older copy. Never skip it on a repeat run. See step 0.
 - **Fresh data every run — no cached grades.** Re-pull price, volume and fundamentals on every
   invocation and rebuild the report from them; never reuse a prior run's figures or output file,
-  and never answer a follow-up from the previous verdict. See step 0.
+  and never answer a follow-up from the previous verdict. See step 1.
 - **Never outrun the data provider.** Every TradingView call is paced by
   `scripts/tv_throttle.py` and stays **below 100 requests/minute** — under whatever lower limit
   the run discovers. Check the limit before the first call, feed every response back with
-  `observe`, and back off the refused endpoint rather than the whole connector (step 0a). Massive
+  `observe`, and back off the refused endpoint rather than the whole connector (step 2). Massive
   keeps its own, much tighter **≤5 calls/min** limit — see the data guide. **A rate-limited call
   is never answered from memory or invention**: fall down the source ladder and date what you
   used.
@@ -422,9 +454,16 @@ substance, adapt the framing.
   is believed), which halves and cools down the refused endpoint on a `rate_limited` response and
   creeps back up after it stays clean. Learned ceilings persist between runs in a state file
   (`$TV_THROTTLE_STATE`, else `$XDG_STATE_HOME/can-slim/tv_throttle.json`). Pure standard library.
-- `tests/test_tv_throttle.py` — regression tests for the throttle (budget bound, per-endpoint
-  backoff, refusal detection, recovery, state handling, CLI exit codes). Run with
-  `python3 -m unittest discover -s tests`.
+- `scripts/self_update.py` — the step-0 pre-flight: compares this install against
+  `github.com/thewongdirection/can-slim-grader@main` and installs a newer version in place —
+  fast-forward in a git clone (never over a dirty or diverged tree), file-by-file from the branch
+  archive in an unpacked install, recording the commit in `.skill-version` so the next check is a
+  single API call. Reports `current` / `updated` / `update-available` / `blocked` / `unknown` and
+  never blocks a run. Pure standard library.
+- `scripts/check_skill.py` — checks `SKILL.md` is importable: frontmatter shape, the name
+  grammar, the 1024-character description cap, no angle-bracket text a Markdown or HTML renderer
+  would eat as a tag, no CRLF/tab/BOM, and that every `references/` or `scripts/` path named here
+  actually exists. Run it before committing a change to this file. Pure standard library.
 - `scripts/check_parity.py` + `parity-manifest.json` — hashes the files shared verbatim with
   `can-slim-recommend` and reports drift since the last recorded sync. Run before committing any
   change to this skill; byte-level only, so material rule changes still need porting by hand.

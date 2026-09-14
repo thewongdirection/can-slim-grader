@@ -39,7 +39,8 @@ INCLUDE = [
     ("assets/evaluation_template.html", "The report itself: fill CONFIG, it renders and audits itself"),
 ]
 # Repo housekeeping that means nothing outside this git repo.
-OMITTED = ["scripts/check_parity.py", "parity-manifest.json", "README.md", "tests/"]
+OMITTED = ["scripts/check_skill.py", "scripts/check_parity.py", "scripts/self_update.py",
+           "parity-manifest.json", "README.md", "tests/"]
 
 PREAMBLE = '''# can-slim-grader - portable bundle
 
@@ -92,6 +93,10 @@ acquires a typo.
 - **File paths** (`scripts/...`, `assets/...`, `references/...`) - the sections of this file.
 - **The parity section at the end of SKILL.md** - housekeeping for keeping two sibling repos in
   sync. Irrelevant here; skip it.
+- **Step 0, "Self-update"** - the skill refreshes itself from its git repo before every run, which
+  needs `scripts/self_update.py` and a checkout. Neither exists here, so the equivalent is to
+  re-export this bundle from <https://github.com/thewongdirection/can-slim-grader> before you rely
+  on it, and to say which date's copy produced a grade. Then start at step 1.
 
 ### 3. The parts that are NOT optional
 
