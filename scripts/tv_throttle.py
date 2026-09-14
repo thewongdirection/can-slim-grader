@@ -25,8 +25,9 @@ global cap.
 ADAPTATION (AIMD - the standard additive-increase/multiplicative-decrease rule).
   - Refused  -> halve that family's believed limit (floor MIN_RPM) and cool the family down for
                 the server's `retry_after`, else an escalating 30s/60s/120s/300s backoff.
-  - Clean    -> after RECOVERY_CLEAN_CALLS good calls and RECOVERY_QUIET_SECONDS without a
-                refusal, add RECOVERY_STEP back, never above the believed cap.
+  - Clean    -> after RECOVERY_CLEAN_CALLS calls OBSERVED clean and RECOVERY_QUIET_SECONDS
+                without a refusal, add RECOVERY_STEP back, never above that lane's established
+                ceiling (the default, or whatever `set-limit` recorded).
 The learned ceiling is kept in a state file so the next run starts where this one left off.
 
 USAGE (every TradingView call in a run goes through this):
@@ -35,6 +36,7 @@ USAGE (every TradingView call in a run goes through this):
         # `wait` spends the call, `observe` only learns from it - pair them and nothing is
         # double-counted. Observing a call made WITHOUT `wait` first needs --record.
   python scripts/tv_throttle.py status --json                # budget + cooldowns for the report
+        # `--state` and `--json` are accepted on either side of the subcommand.
   python scripts/tv_throttle.py plan --calls 8 --tool get_ohlcv
   python scripts/tv_throttle.py set-limit --family scanner --per-minute 60 --source "TV support"
   python scripts/tv_throttle.py reset
@@ -146,8 +148,12 @@ def _num(value, fallback):
 
 
 def _blank_lane(rpm):
-    return {"believed_rpm": rpm, "source": "default", "calls": [], "cooldown_until": 0.0,
-            "consecutive_limits": 0, "clean_calls": 0, "last_limited": 0.0, "limit_events": 0}
+    # `ceiling_rpm` is the limit this lane is allowed to climb back to: the default, or whatever
+    # `set-limit` established. A refusal lowers `believed_rpm`; it never lowers the ceiling, so a
+    # discovered limit is not quietly forgotten the first time the endpoint says no.
+    return {"believed_rpm": rpm, "ceiling_rpm": rpm, "source": "default", "calls": [],
+            "cooldown_until": 0.0, "consecutive_limits": 0, "clean_calls": 0,
+            "last_limited": 0.0, "limit_events": 0}
 
 
 def blank_state():
@@ -155,6 +161,31 @@ def blank_state():
           "global": _blank_lane(DEFAULT_GLOBAL_RPM),
           "families": {f: _blank_lane(DEFAULT_FAMILY_RPM) for f in FAMILIES}}
     return st
+
+
+def _sane_lane(value, rpm):
+    """One lane, coerced into shape. Anything that will not coerce falls back to the default.
+
+    The state file is persistent and hand-editable, and a half-written or hand-mangled ledger can
+    hold anything at all - a string where a lane belongs, a list where the families map belongs.
+    A corrupt ledger must cost a slower run, never a crashed grade, so nothing here may raise.
+    """
+    default = _blank_lane(rpm)
+    lane = dict(value) if isinstance(value, dict) else {}
+    for k, v in default.items():
+        lane.setdefault(k, v)
+    calls = lane.get("calls")
+    lane["calls"] = sorted(t for t in (_num(c, None) for c in (calls if isinstance(calls, list)
+                                                               else []))
+                           if t is not None)
+    for k in ("believed_rpm", "ceiling_rpm", "cooldown_until", "last_limited",
+              "consecutive_limits", "clean_calls", "limit_events"):
+        lane[k] = _num(lane.get(k), default[k])
+    for k in ("believed_rpm", "ceiling_rpm"):
+        lane[k] = max(1, min(int(lane[k]), ABSOLUTE_MAX_RPM))
+    if not isinstance(lane.get("source"), str):
+        lane["source"] = default["source"]
+    return lane
 
 
 def load_state(path):
@@ -165,24 +196,13 @@ def load_state(path):
         return blank_state()
     if not isinstance(st, dict) or st.get("version") != STATE_VERSION:
         return blank_state()
-    st.setdefault("global", _blank_lane(DEFAULT_GLOBAL_RPM))
-    fams = st.setdefault("families", {})
-    for f in FAMILIES:
-        fams.setdefault(f, _blank_lane(DEFAULT_FAMILY_RPM))
-    # The state file is persistent and hand-editable, so nothing read back is trusted: coerce
-    # every number and drop what will not coerce. A corrupt ledger must cost a slower run, never
-    # a crashed grade.
-    for lane in [st["global"]] + list(fams.values()):
-        default = _blank_lane(DEFAULT_FAMILY_RPM)
-        for k, v in default.items():
-            lane.setdefault(k, v)
-        lane["calls"] = sorted(_num(t, None) for t in lane.get("calls", [])
-                               if _num(t, None) is not None)
-        for k in ("believed_rpm", "cooldown_until", "last_limited", "consecutive_limits",
-                  "clean_calls", "limit_events"):
-            lane[k] = _num(lane.get(k), default[k])
-        lane["believed_rpm"] = max(1, min(int(lane["believed_rpm"]), ABSOLUTE_MAX_RPM))
-    return st
+    fams = st.get("families")
+    if not isinstance(fams, dict):
+        fams = {}
+    # Each lane keeps its OWN default: the global lane is a 100/min cap, not a 60/min family.
+    return {"version": STATE_VERSION,
+            "global": _sane_lane(st.get("global"), DEFAULT_GLOBAL_RPM),
+            "families": {f: _sane_lane(fams.get(f), DEFAULT_FAMILY_RPM) for f in FAMILIES}}
 
 
 def save_state(path, st):
@@ -249,7 +269,13 @@ def effective_rpm(lane):
 
 
 def prune(lane, now):
-    lane["calls"] = sorted(t for t in lane["calls"] if now - t < WINDOW)
+    """Drop the calls that no longer count against the window.
+
+    A timestamp from the FUTURE never expires - a clock that jumps forward (or a hand-edited
+    ledger) would wedge the lane for as long as the skew lasts, and the skew outlives the run
+    because the ledger is persistent. Anything more than one window ahead is bogus: drop it.
+    """
+    lane["calls"] = sorted(t for t in lane["calls"] if now - t < WINDOW and t <= now + WINDOW)
     return lane["calls"]
 
 
@@ -287,13 +313,20 @@ def note_clean(st, family, n, now):
     maybe_recover(st, family, now)
 
 
-def record_calls(st, family, n, now):
-    """Spend n calls from the family lane and the global cap, and credit them as clean."""
+def record_calls(st, family, n, now, clean=True):
+    """Spend n calls from the family lane and the global cap.
+
+    `clean=False` for a call that has not come back yet: `wait` reserves the slot BEFORE the call
+    is made, so crediting it towards recovery there would both count a call whose response is
+    still unknown and double-count it when `observe` reports the response. Recovery is credited
+    where cleanliness is actually observed.
+    """
     for lane in lanes_for(st, family):
         prune(lane, now)
         lane["calls"].extend([now] * n)
         lane["calls"] = sorted(lane["calls"])[-(2 * ABSOLUTE_MAX_RPM):]
-    note_clean(st, family, n, now)
+    if clean:
+        note_clean(st, family, n, now)
 
 
 def note_limited(st, family, now, retry_after=None):
@@ -313,7 +346,17 @@ def note_limited(st, family, now, retry_after=None):
     lane["believed_rpm"] = max(MIN_RPM, int(believed / 2))
     lane["source"] = "observed"
     idx = min(lane["consecutive_limits"], len(BACKOFF_SECONDS)) - 1
-    backoff = float(retry_after) if retry_after else float(BACKOFF_SECONDS[idx])
+    backoff = float(BACKOFF_SECONDS[idx])
+    # A server-asked wait is honoured only when it is a real, non-negative number: 0 means "go
+    # now" and must not silently become 30s, while a negative (or unparseable) value is nonsense
+    # and must not cancel the cooldown of a refusal that actually happened.
+    if retry_after is not None:
+        try:
+            asked = float(retry_after)
+        except (TypeError, ValueError):
+            asked = None
+        if asked is not None and asked >= 0:
+            backoff = asked
     lane["cooldown_until"] = max(float(lane.get("cooldown_until", 0.0)), now + backoff)
     return lane["cooldown_until"] - now
 
@@ -327,7 +370,8 @@ def maybe_recover(st, family, now):
         return
     if now - float(lane.get("last_limited", 0.0)) < RECOVERY_QUIET_SECONDS:
         return
-    raised = min(DEFAULT_FAMILY_RPM, int(lane.get("believed_rpm", MIN_RPM)) + RECOVERY_STEP)
+    ceiling = int(_num(lane.get("ceiling_rpm"), DEFAULT_FAMILY_RPM))
+    raised = min(ceiling, int(lane.get("believed_rpm", MIN_RPM)) + RECOVERY_STEP)
     if raised > lane["believed_rpm"]:
         lane["believed_rpm"] = raised
     lane["clean_calls"] = 0
@@ -337,8 +381,27 @@ def maybe_recover(st, family, now):
 # --- reading a limit off a response ----------------------------------------------------------
 
 _LIMIT_TEXT = re.compile(
-    r"rate[\s_-]?limit|too\s+many\s+requests|\b429\b|quota\s+exceeded|throttl", re.I)
+    r"rate[\s_-]?limit|too\s+many\s+requests|quota\s+exceeded|throttl"
+    # A bare 429 is not a signal - it is also a share price, a volume and a bar level. Only a 429
+    # that reads as a status code counts.
+    r"|(?:\bhttp\b|\bstatus\b|\bcode\b|\berror\b)[^\d]{0,8}429\b", re.I)
 _RETRY_TEXT = re.compile(r"retry[\s_-]?after\D{0,10}(\d+(?:\.\d+)?)", re.I)
+# Where a refusal describes itself. Scanning the WHOLE payload would read the data as well as the
+# error, and a stock trading near $429 or a headline about throttling is not a refusal.
+_ERROR_KEYS = ("error", "errors", "message", "detail", "details", "reason", "status",
+               "status_text", "statusText")
+
+
+def _error_text(obj, text):
+    """The part of a response that can carry a refusal - or all of it, if it is not an object."""
+    if obj is None:
+        return text
+    parts = []
+    for key in _ERROR_KEYS:
+        val = obj.get(key)
+        if val is not None:
+            parts.append(val if isinstance(val, str) else json.dumps(val))
+    return " ".join(parts)
 
 
 def detect_limit(payload):
@@ -379,7 +442,7 @@ def detect_limit(payload):
         return False, retry, "server set rate_limited=false"
     if obj is not None and obj.get("success") is True:
         return False, retry, "success"
-    m = _LIMIT_TEXT.search(text)
+    m = _LIMIT_TEXT.search(_error_text(obj, text))
     if m:
         return True, retry, "response text matched %r" % m.group(0)
     return False, retry, "no rate-limit signal"
@@ -419,6 +482,18 @@ def print_status(snap):
 
 
 # --- commands --------------------------------------------------------------------------------
+
+def _calls(text):
+    """`--calls` is a count of real requests: zero reserves nothing and negatives corrupt the
+    recovery counter, so neither is accepted."""
+    try:
+        n = int(text)
+    except (TypeError, ValueError):
+        raise argparse.ArgumentTypeError("%r is not a whole number of calls" % text)
+    if n < 1:
+        raise argparse.ArgumentTypeError("must be at least 1 (got %d)" % n)
+    return n
+
 
 def _resolve_family(args):
     if getattr(args, "family", None):
@@ -473,6 +548,7 @@ def cmd_check(args, path):
 def cmd_wait(args, path):
     fam = _resolve_family(args)
     slept = 0.0
+    saved = False
     while True:
         with _Lock(path):
             st = load_state(path)
@@ -486,13 +562,18 @@ def cmd_wait(args, path):
                 return 4
             if wait <= 0:
                 if args.record:
-                    record_calls(st, fam, args.calls, now)
+                    # Reserved, not yet answered: `observe` credits it towards recovery.
+                    record_calls(st, fam, args.calls, now, clean=False)
                 save_state(path, st)
                 _emit(args, {"family": fam, "calls": args.calls, "waited_s": round(slept, 2),
                              "recorded": bool(args.record)},
                       "tv_throttle: GO (%s)%s" % (fam, " after %.1fs" % slept if slept else ""))
                 return 0
-            save_state(path, st)
+            if not saved:
+                # Once is enough: the poll loop changes nothing, and an unwritable ledger has to
+                # warn on the first pass, not on every one of them.
+                save_state(path, st)
+                saved = True
         if args.max_wait is not None and slept + wait > args.max_wait:
             _emit(args, {"family": fam, "calls": args.calls, "waited_s": round(slept, 2),
                          "wait_s": round(wait, 2), "gave_up": True},
@@ -541,10 +622,15 @@ def cmd_observe(args, path):
         if src in (None, "-"):
             raw = sys.stdin.read()
         else:
-            with open(src, "r", encoding="utf-8") as f:
-                raw = f.read()
+            try:
+                with open(src, "r", encoding="utf-8") as f:
+                    raw = f.read()
+            except OSError as exc:
+                raise SystemExit("tv_throttle: cannot read the response file %s (%s) - pipe the "
+                                 "response on stdin with `-` instead." % (src, exc))
         limited, retry, reason = detect_limit(raw)
-        if args.retry_after:
+        if args.retry_after is not None:
+            # An explicit --retry-after overrides what the payload said, including a literal 0.
             retry = args.retry_after
     with _Lock(path):
         st = load_state(path)
@@ -585,10 +671,15 @@ def cmd_plan(args, path):
     else:
         # Each window past the first admits `eff` more calls.
         seconds = WINDOW * ((n - free + eff - 1) // eff)
+    # `wait`/`check` refuse a batch bigger than one window outright, so say so here rather than
+    # quoting a schedule the throttle will not run.
+    fits = n <= eff
+    split = "" if fits else (" NOTE: more than one window's worth - `wait` will refuse this "
+                             "batch (exit 4); split it into groups of %d or fewer." % eff)
     _emit(args, {"family": fam, "calls": n, "effective_rpm": eff, "free_now": free,
-                 "estimated_seconds": round(seconds, 1)},
-          "tv_throttle: %d %s call(s) at %d/min - %d can go now, ~%.0fs to finish."
-          % (n, fam, eff, free, seconds))
+                 "fits_one_window": fits, "estimated_seconds": round(seconds, 1)},
+          "tv_throttle: %d %s call(s) at %d/min - %d can go now, ~%.0fs to finish.%s"
+          % (n, fam, eff, free, seconds, split))
     return 0
 
 
@@ -608,6 +699,9 @@ def cmd_set_limit(args, path):
             [st["families"][fam]] if fam else [st["global"]] + list(st["families"].values()))
         for lane in targets:
             lane["believed_rpm"] = capped
+            # An established limit is also the ceiling recovery may climb back to, so one
+            # refusal cannot permanently demote a number TradingView actually gave us.
+            lane["ceiling_rpm"] = capped
             lane["source"] = args.source or "manual"
         snap = snapshot(st, now)
         save_state(path, st)
@@ -633,11 +727,22 @@ def cmd_reset(args, path):
         else:
             st = blank_state()
         save_state(path, st)
-    print("tv_throttle: reset %s." % (args.family or "every lane"))
+    _emit(args, {"reset": args.family or "all"},
+          "tv_throttle: reset %s." % (args.family or "every lane"))
     return 0
 
 
 def build_parser():
+    # `--state` and `--json` are global, but a caller naturally types them after the subcommand
+    # (`status --json`). Repeating them on every subparser with SUPPRESS defaults makes both
+    # orders work without the subparser's default clobbering a value given up front.
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument("--state", default=argparse.SUPPRESS,
+                        help="state file (default $TV_THROTTLE_STATE or "
+                             "$XDG_STATE_HOME/can-slim/tv_throttle.json)")
+    common.add_argument("--json", action="store_true", default=argparse.SUPPRESS,
+                        help="machine-readable output")
+
     ap = argparse.ArgumentParser(
         description="Pace TradingView calls under a discovered rate limit (hard bound %d/min)."
                     % ABSOLUTE_MAX_RPM)
@@ -646,24 +751,27 @@ def build_parser():
     ap.add_argument("--json", action="store_true", help="machine-readable output")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
+    def add(name, **kw):
+        return sub.add_parser(name, parents=[common], **kw)
+
     def with_target(p):
         p.add_argument("--tool", help="TradingView tool name, e.g. get_ohlcv")
         p.add_argument("--family", help="or the family directly: %s" % ", ".join(FAMILIES))
         return p
 
-    with_target(sub.add_parser("check", help="can N calls go now? (non-blocking)")).add_argument(
-        "--calls", type=int, default=1)
-    w = with_target(sub.add_parser("wait", help="block until N calls fit, then record them"))
-    w.add_argument("--calls", type=int, default=1)
+    with_target(add("check", help="can N calls go now? (non-blocking)")).add_argument(
+        "--calls", type=_calls, default=1)
+    w = with_target(add("wait", help="block until N calls fit, then record them"))
+    w.add_argument("--calls", type=_calls, default=1)
     w.add_argument("--max-wait", type=float, default=90.0,
                    help="give up after this many seconds and use the source ladder (default 90)")
     w.add_argument("--no-record", dest="record", action="store_false", default=True,
                    help="do not count the call(s) yet")
-    with_target(sub.add_parser("record", help="count calls already made")).add_argument(
-        "--calls", type=int, default=1)
-    lim = with_target(sub.add_parser("limited", help="report a refusal; halve and cool down"))
+    with_target(add("record", help="count calls already made")).add_argument(
+        "--calls", type=_calls, default=1)
+    lim = with_target(add("limited", help="report a refusal; halve and cool down"))
     lim.add_argument("--retry-after", type=float, help="seconds the server asked for")
-    obs = with_target(sub.add_parser("observe", help="feed a tool response in; adapt from it"))
+    obs = with_target(add("observe", help="feed a tool response in; adapt from it"))
     obs.add_argument("response", nargs="?", default="-",
                      help="file with the JSON response, or - for stdin")
     obs.add_argument("--rate-limited", action="store_true",
@@ -671,14 +779,14 @@ def build_parser():
     obs.add_argument("--retry-after", type=float)
     obs.add_argument("--record", action="store_true",
                      help="also spend the call from the budget (only if `wait` did not already)")
-    with_target(sub.add_parser("plan", help="estimate the time for a batch")).add_argument(
-        "--calls", type=int, required=True)
-    sl = sub.add_parser("set-limit", help="record a limit that was actually discovered")
+    with_target(add("plan", help="estimate the time for a batch")).add_argument(
+        "--calls", type=_calls, required=True)
+    sl = add("set-limit", help="record a limit that was actually discovered")
     sl.add_argument("--family", help="a family, 'global', or omit for every lane")
     sl.add_argument("--per-minute", type=int, required=True)
     sl.add_argument("--source", help="where the number came from")
-    sub.add_parser("status", help="show the budget")
-    r = sub.add_parser("reset", help="forget the learned ceiling")
+    add("status", help="show the budget")
+    r = add("reset", help="forget the learned ceiling")
     r.add_argument("--family")
     return ap
 

@@ -75,8 +75,9 @@ allowed; an undated or silently stale one is not. For the ticker you name it:
 - `scripts/tv_throttle.py` — keeps the run under TradingView's rate limit. TradingView publishes
   no limit for these endpoints and refuses rather than warns (`{"success": false,
   "rate_limited": true, ...}`, wrapping a 403 from the scanner), so the ceiling is **discovered
-  each run**: a sliding-window budget hard-bounded at **100 requests/minute** — 80/min out of the
-  box, since it spends 80% of whatever limit is believed — kept **per endpoint**, because the
+  each run**: a sliding-window budget hard-bounded at **100 requests/minute** — 80/min
+  connector-wide out of the box (48/min per endpoint), since it spends 80% of whatever limit is
+  believed — kept **per endpoint**, because the
   scanner and the chart service are limited separately (observed: `get_symbol_data` refused while
   `get_ohlcv` answered in the same second). A refusal halves that endpoint's ceiling and cools it
   down; a clean stretch creeps it back up; the learned ceiling persists between runs. Standard

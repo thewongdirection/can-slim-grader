@@ -94,10 +94,10 @@ adjusted from what actually happens**, and `scripts/tv_throttle.py` enforces it.
 
 | | |
 |---|---|
-| **Hard bound** | **100 requests/minute**, never reached — the throttle spends **80%** of whatever limit is believed (80/min out of the box). |
+| **Hard bound** | **100 requests/minute**, never reached — the throttle spends **80%** of whatever limit is believed: 80/min connector-wide out of the box, 48/min per endpoint. |
 | **Per endpoint** | `scanner` (`get_quote`, `get_symbol_data`, `run_screener`, `search_symbols`, the technicals tools) and `chart` (`get_ohlcv` and the structure tools) are limited **separately** — observed: both scanner tools refused while `get_ohlcv` answered in the same second. Fundamentals, news and anything unmapped get their own lanes under the global cap. |
 | **On a refusal** | that endpoint's ceiling is **halved** (floor 5/min) and it cools down for the server's `retry_after`, else 30s → 60s → 120s → 300s. Only the refused endpoint backs off. |
-| **Recovery** | after 20 clean calls and 2 quiet minutes the ceiling creeps back +5/min, never above the 60/min default. Learned ceilings persist between runs. |
+| **Recovery** | after 20 *observed-clean* calls and 2 quiet minutes the ceiling creeps back +5/min, never above that lane's established ceiling (the 60/min default unless `set-limit` raised it). Learned ceilings persist between runs. |
 
 The loop, per call: `wait --tool <name>` → make the call → `observe --tool <name> -` with the
 response. `observe` is what keeps the limit current — it distinguishes a real refusal (the
@@ -145,9 +145,10 @@ C/A from the fundamental ladder below. (Verified 2026-07: aggregates + ticker-ov
 financials/ratios/earnings needed a plan upgrade. Cross-check: Massive bars reproduced the
 IBKR-based RS and % off high exactly.)
 **Rate limit — throttle Massive to at most 5 calls per minute** (space them ~12s apart) — far
-tighter than TradingView's, and unrelated to it; pace it with
-`scripts/tv_throttle.py --family other` after `set-limit --family other --per-minute 5` if you
-want the same bookkeeping. Batch
+tighter than TradingView's, and unrelated to it. Do **not** pace Massive with
+`scripts/tv_throttle.py`: every call it records also spends a slot from the TradingView
+connector-wide budget, and its `other` lane is the fallback for unmapped *TradingView* tools, so
+one provider would throttle the other. Space Massive's calls yourself. Batch
 to stay under it: one `/v2/aggs` call per ticker for daily and one for weekly, fetch SPY's bars
 **once** and reuse the stored table across tickers, and prefer `query_data` (SQL over stored
 tables) over re-fetching. A typical single-ticker grade needs only ~3-4 Massive calls (ticker

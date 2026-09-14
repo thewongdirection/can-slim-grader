@@ -10,6 +10,7 @@ import contextlib
 import io
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -112,6 +113,13 @@ class Window(unittest.TestCase):
         tv.prune(lane, 300.0 + tv.WINDOW + 1)
         self.assertEqual(lane["calls"], [])
 
+    def test_a_timestamp_from_the_future_does_not_wedge_the_lane(self):
+        # A clock that jumps forward would otherwise leave calls that never expire - and the
+        # ledger is persistent, so the lane would stay blocked across runs.
+        lane = self.st["families"]["chart"]
+        lane["calls"] = [10.0 ** 18] * tv.effective_rpm(lane)
+        self.assertEqual(tv.wait_seconds(self.st, "chart", 1, 1000.0), 0)
+
 
 class Detection(unittest.TestCase):
     def test_servers_own_flag_is_authoritative(self):
@@ -157,6 +165,16 @@ class Detection(unittest.TestCase):
     def test_non_json_text_does_not_crash(self):
         self.assertFalse(tv.detect_limit("<html>502 Bad Gateway</html>")[0])
 
+    def test_data_is_not_mistaken_for_a_refusal(self):
+        # The text fallback reads the ERROR, not the payload: a stock trading near $429, a bar
+        # level of 429 or a headline about throttling is data, and throwing it away as a refusal
+        # would cost the grade a figure it actually received.
+        for text in ('{"symbol":"NASDAQ:X","volume":429}',
+                     '{"close":429.5,"bars":[428,429,430]}',
+                     '{"title":"Fed weighs rate limits on banks"}',
+                     '{"headline":"Exchange throttles order flow"}'):
+            self.assertFalse(tv.detect_limit(text)[0], text)
+
 
 class Adaptation(unittest.TestCase):
     def setUp(self):
@@ -194,6 +212,26 @@ class Adaptation(unittest.TestCase):
         cooldown = tv.note_limited(self.st, "scanner", 1000.0, retry_after=5)
         self.assertAlmostEqual(cooldown, 5.0, places=3)
 
+    def test_a_nonsense_retry_after_cannot_cancel_the_cooldown(self):
+        # A negative wait is not an instruction to skip backing off after a real refusal.
+        cooldown = tv.note_limited(self.st, "scanner", 1000.0, retry_after=-30)
+        self.assertAlmostEqual(cooldown, float(tv.BACKOFF_SECONDS[0]), places=3)
+        self.assertGreater(tv.wait_seconds(self.st, "scanner", 1, 1000.0), 0)
+
+    def test_retry_after_zero_is_a_number_not_a_falsy(self):
+        self.assertAlmostEqual(tv.note_limited(self.st, "scanner", 1000.0, retry_after=0),
+                               0.0, places=3)
+
+    def test_recovery_climbs_back_to_an_established_ceiling(self):
+        # A limit TradingView actually gave us must not be demoted to the default by one refusal.
+        lane = self.st["families"]["scanner"]
+        lane["believed_rpm"] = lane["ceiling_rpm"] = 100
+        tv.note_limited(self.st, "scanner", 1000.0)
+        for k in range(40):
+            tv.note_clean(self.st, "scanner", tv.RECOVERY_CLEAN_CALLS,
+                          1000.0 + tv.RECOVERY_QUIET_SECONDS + 1 + k)
+        self.assertEqual(lane["believed_rpm"], 100)
+
     def test_backoff_floors_at_min_rpm(self):
         for i in range(20):
             tv.note_limited(self.st, "scanner", 1000.0 + i)
@@ -226,6 +264,22 @@ class Adaptation(unittest.TestCase):
 
 
 class CleanCredit(unittest.TestCase):
+    def test_reserving_a_slot_does_not_vouch_for_the_response(self):
+        # `wait` records the call BEFORE it is made, so crediting recovery there would count a
+        # call whose response is unknown - and count it twice once `observe` reports it.
+        st = tv.blank_state()
+        tv.note_limited(st, "chart", 1000.0)
+        halved = st["families"]["chart"]["believed_rpm"]
+        quiet = 1000.0 + tv.RECOVERY_QUIET_SECONDS + 1
+        for _ in range(tv.RECOVERY_CLEAN_CALLS - 1):          # the documented wait -> observe loop
+            tv.record_calls(st, "chart", 1, quiet, clean=False)
+            tv.note_clean(st, "chart", 1, quiet)
+        self.assertEqual(st["families"]["chart"]["believed_rpm"], halved)
+        tv.record_calls(st, "chart", 1, quiet, clean=False)
+        tv.note_clean(st, "chart", 1, quiet)
+        self.assertEqual(st["families"]["chart"]["believed_rpm"], halved + tv.RECOVERY_STEP)
+
+
     def test_note_clean_credits_recovery_without_spending_budget(self):
         st = tv.blank_state()
         tv.note_clean(st, "chart", 5, 1000.0)
@@ -244,6 +298,7 @@ class CleanCredit(unittest.TestCase):
 class StateFile(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.dir, ignore_errors=True)
         self.path = os.path.join(self.dir, "nested", "state.json")
 
     def test_save_reports_failure_instead_of_raising(self):
@@ -302,6 +357,28 @@ class StateFile(unittest.TestCase):
         self.assertEqual(lane["believed_rpm"], tv.ABSOLUTE_MAX_RPM)
         self.assertLess(tv.effective_rpm(lane), tv.ABSOLUTE_MAX_RPM)
 
+    def test_a_lane_that_is_not_a_lane_does_not_crash_the_run(self):
+        # The ledger is hand-editable and can be half-written: nothing in it may raise.
+        for blob in ({"version": tv.STATE_VERSION, "families": {"scanner": "hello"}},
+                     {"version": tv.STATE_VERSION, "families": []},
+                     {"version": tv.STATE_VERSION, "global": 5, "families": {}},
+                     {"version": tv.STATE_VERSION, "families": {"scanner": {"calls": 7}}}):
+            os.makedirs(os.path.dirname(self.path), exist_ok=True)
+            with open(self.path, "w", encoding="utf-8") as f:
+                json.dump(blob, f)
+            st = tv.load_state(self.path)
+            self.assertEqual(st["families"]["scanner"]["believed_rpm"], tv.DEFAULT_FAMILY_RPM)
+            self.assertEqual(st["families"]["scanner"]["calls"], [])
+
+    def test_the_global_lane_keeps_the_global_default(self):
+        # Backfilling it from the family default would quietly drop the connector-wide budget.
+        os.makedirs(os.path.dirname(self.path), exist_ok=True)
+        with open(self.path, "w", encoding="utf-8") as f:
+            json.dump({"version": tv.STATE_VERSION, "global": {"calls": []},
+                       "families": {}}, f)
+        self.assertEqual(tv.load_state(self.path)["global"]["believed_rpm"],
+                         tv.DEFAULT_GLOBAL_RPM)
+
     def test_partial_state_is_backfilled(self):
         os.makedirs(os.path.dirname(self.path), exist_ok=True)
         with open(self.path, "w", encoding="utf-8") as f:
@@ -316,6 +393,7 @@ class StateFile(unittest.TestCase):
 class Cli(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.dir, ignore_errors=True)
         self.state = os.path.join(self.dir, "state.json")
 
     def run_cli(self, *args):
@@ -388,6 +466,45 @@ class Cli(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertIn("WARNING", proc.stderr)
         self.assertIn("TV_THROTTLE_STATE", proc.stderr)
+
+    def test_global_flags_work_on_either_side_of_the_subcommand(self):
+        # The usage block documents `status --json`; it has to actually parse.
+        proc = subprocess.run([sys.executable, SCRIPT, "--state", self.state, "status", "--json"],
+                              capture_output=True, text=True)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertLess(json.loads(proc.stdout)["global"]["effective_rpm"], 100)
+
+    def test_calls_must_be_a_positive_count(self):
+        for bad in ("0", "-5"):
+            rc, _, err = self.run_cli("record", "--tool", "get_ohlcv", "--calls", bad)
+            self.assertNotEqual(rc, 0)
+            self.assertIn("--calls", err)
+
+    def test_an_unreadable_response_file_is_an_error_not_a_traceback(self):
+        rc, _, err = self.run_cli("observe", "--tool", "get_ohlcv",
+                                  os.path.join(self.dir, "does-not-exist.json"))
+        self.assertNotEqual(rc, 0)
+        self.assertIn("cannot read the response file", err)
+        self.assertNotIn("Traceback", err)
+
+    def test_plan_says_when_a_batch_cannot_fit_one_window(self):
+        # `wait` refuses such a batch (exit 4), so `plan` must not quote a schedule for it.
+        rc, out, _ = self.run_cli("--json", "plan", "--calls", "90", "--tool", "get_ohlcv")
+        self.assertEqual(rc, 0)
+        self.assertFalse(json.loads(out)["fits_one_window"])
+        rc, _, _ = self.run_cli("wait", "--calls", "90", "--tool", "get_ohlcv")
+        self.assertEqual(rc, 4)
+
+    def test_observe_retry_after_zero_is_honoured_not_dropped(self):
+        proc = subprocess.run(
+            [sys.executable, SCRIPT, "--state", self.state, "--json",
+             "observe", "--tool", "get_quote", "--retry-after", "0", "-"],
+            input='{"success":false,"rate_limited":true}', capture_output=True, text=True)
+        self.assertEqual(proc.returncode, 3)
+        self.assertEqual(json.loads(proc.stdout)["cooldown_s"], 0)
+        # ...and the endpoint is usable again immediately, as the server asked.
+        rc, _, _ = self.run_cli("check", "--tool", "get_quote")
+        self.assertEqual(rc, 0)
 
     def test_observe_accepts_a_response_file(self):
         p = os.path.join(self.dir, "resp.json")

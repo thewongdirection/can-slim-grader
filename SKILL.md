@@ -142,7 +142,8 @@ never more than **100 requests/minute**, and by default well under that.
 **Then pace the run:**
 - Before each call or batch: `python3 scripts/tv_throttle.py wait --tool <tool_name>` — it blocks
   until a slot is free, records the call, and gives up (exit 3) rather than stalling the run past
-  `--max-wait`, which is your cue to use the source ladder instead.
+  `--max-wait`, which is your cue to use the source ladder instead. A batch bigger than one
+  window is refused outright (exit 4): split it, and `plan --calls <n>` says where the split is.
 - After each call: pipe the response to
   `python3 scripts/tv_throttle.py observe --tool <tool_name> -`. **This is the "always check"
   half** — it reads the response for a refusal, halves that endpoint's ceiling, and cools it down
