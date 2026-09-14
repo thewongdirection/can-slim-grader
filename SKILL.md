@@ -160,33 +160,26 @@ In order:
 
 ### 2 — Check TradingView's limit, then pace every call under it
 TradingView publishes no rate limit and **refuses rather than warns** — `{"success": false,
-"rate_limited": true, ...}`, and a *successful* response carries no budget to pace off. So the
+"rate_limited": true, ...}` — and a successful response carries no budget to pace off. So the
 limit is discovered every run and `scripts/tv_throttle.py` holds the run under it: never more
-than **100 requests/minute**, and by default well below. Full rules in the data guide.
+than **100 requests/minute**. **The data guide has the full rules**; the procedure is:
 
-**Establish the limit, and never raise the ceiling on a guess:**
 1. `python3 scripts/tv_throttle.py status` — the budget carried over, including any lower ceiling
    a refusal already taught it. Start here every run.
 2. Check the responses you are already getting for a limit TradingView advertises (`rate_limited`,
-   `retry_after`, `limit`/`remaining`/`reset`). Today it sets only `rate_limited`.
-3. Adopt a number only if one is actually established — advertised, documented, or given by the
-   user: `set-limit --family scanner --per-minute {N} --source "{where}"`. Otherwise keep the
-   default; an undocumented limit is not licence to go faster.
+   `retry_after`, `limit`/`remaining`/`reset`); today it sets only `rate_limited`. Adopt a number
+   only if one is genuinely established, with
+   `set-limit --family scanner --per-minute {N} --source "{where}"`. Otherwise keep the default —
+   an undocumented limit is not licence to go faster.
+3. Pace every call: `wait --tool {tool_name}` → make the call → pipe the response to
+   `observe --tool {tool_name} -`. **`observe` is the "always check" half**, re-deriving the
+   ceiling from what the connector actually did. `wait` gives up rather than stall the run (exit
+   3 — use the source ladder); an over-large batch is refused (exit 4 — split it).
 
-**Then pace every call:** `wait --tool {tool_name}` → make the call → pipe the response to
-`observe --tool {tool_name} -`. **`observe` is the "always check" half**: it reads the response
-for a refusal and re-derives the ceiling from it. `wait` spends the call and `observe` only
-learns from it, so the pair counts each call once. `wait` gives up rather than stalling the run
-(exit 3 — use the source ladder); a batch bigger than one window is refused outright (exit 4 —
-split it, `plan --calls {n}` says where).
-
-- **Back off per endpoint, not per connector.** `get_symbol_data` and `get_quote` were refused in
-  one observed check while `get_ohlcv` answered in the same second. Don't stop pulling bars
-  because the scanner is sulking.
-- **On a refusal, never fabricate the figure.** Wait out the cooldown, retry **once**, then drop
-  down the source ladder and record the row in `CONFIG.dataStatus.items` as
-  `carried`/`unavailable` with a `why` naming the rate limit. A grade is only ~6-8 TradingView
-  calls, so being throttled says something real about the connector, not about your pacing.
+**Back off per endpoint, not per connector** — `get_symbol_data` and `get_quote` were refused in
+one observed check while `get_ohlcv` answered in the same second. **On a refusal never fabricate
+the figure**: wait out the cooldown, retry once, then drop down the source ladder and record the
+row in `CONFIG.dataStatus.items` as `carried`/`unavailable` with a `why` naming the rate limit.
 
 ### 3 — Resolve the ticker
 TradingView: `search_symbols` → the `EXCHANGE:TICKER` id (e.g. `NASDAQ:WDC`); `get_financials`
@@ -375,9 +368,10 @@ makes sense for one-ticker-in / one-verdict-out. The screener has its own output
 substance, adapt the framing.
 
 ### Procedure
-1. **Before committing, run `python scripts/check_skill.py` and
-   `python scripts/check_parity.py`.** The first refuses a `SKILL.md` that would not import; the
-   second hashes the shared files against `parity-manifest.json` and names exactly what drifted.
+1. **Before committing, run `python3 -m unittest discover -s tests`, then
+   `python scripts/check_skill.py` and `python scripts/check_parity.py`.** The tests cover the
+   scripts; the first check refuses a `SKILL.md` that would not import; the second hashes the
+   shared files against `parity-manifest.json` and names exactly what drifted.
 2. If a shared file changed — or if you changed a rule in the material list above, **which the
    script cannot detect** — port the same change to
    **https://github.com/thewongdirection/can-slim-recommend**. Add the repo to the session first
@@ -473,6 +467,10 @@ substance, adapt the framing.
   the page box from the template's `@page` rule, the other two are passed A4/15 mm explicitly.
   Prints the engine used. Pure standard library (uses
   whatever browser/lib is present).
+- `tests/` — regression tests for `scripts/tv_throttle.py`, `scripts/self_update.py` and
+  `scripts/check_skill.py` (budgets and backoff, the archive/git update paths and their
+  refusals, every rule the skill checker enforces). Offline, standard library, no pytest. Run
+  with `python3 -m unittest discover -s tests`.
 - `assets/evaluation_template.html` — the report itself: a self-contained single-stock CAN SLIM
   dashboard driven by a `CONFIG` object (verdict badge, the seven-letter scorecard with evidence,
   the daily candlestick chart, technicals, and the buy/sell plan). **One file, two media:

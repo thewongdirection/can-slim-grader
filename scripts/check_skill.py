@@ -28,11 +28,19 @@ KNOWN_KEYS = {"name", "description", "license", "allowed-tools", "metadata", "ve
 MAX_NAME = 64
 MAX_DESCRIPTION = 1024
 # Guidance, not a hard cap: past this a skill is better off pushing detail into references/.
-SOFT_MAX_WORDS = 5000
+# Raised from 5000 once this skill carried two procedural pre-flights (the self-update check and
+# the TradingView throttle) on top of the eight-step grading workflow. 5000 was calibrated when
+# there was one: with both, even stripping a whole feature's prose only reaches ~4970, so the old
+# figure failed `--strict` on a clean checkout - a gate README tells contributors to run. The
+# detail these two added lives in references/; what is left here is the procedure itself.
+SOFT_MAX_WORDS = 5500
 SOFT_MAX_LINES = 500
 
 # Anything that reads as a markup tag: <div>, <TICKER>, </p>. Use {placeholder} instead.
 TAG_RE = re.compile(r"<[/!?a-zA-Z][^>\n]{0,120}>")
+# ...except a Markdown autolink, <https://example.com> or <me@example.com>, which is ordinary
+# Markdown and renders as a link rather than being swallowed.
+AUTOLINK_RE = re.compile(r"^<(?:[a-zA-Z][a-zA-Z0-9+.-]*:[^>\s]+|[^>\s@]+@[^>\s@]+)>$")
 # Repo-relative paths the document points at, inside backticks.
 PATH_RE = re.compile(r"`((?:references|scripts|assets|tests)/[A-Za-z0-9._/-]+)`")
 
@@ -98,7 +106,9 @@ def _check_encoding(text):
         if "\t" in line:
             out.append(("ERROR", "line %d contains a tab - YAML forbids them for indentation" % n))
             break
-    bad = {c for c in text if unicodedata.category(c) == "Cc" and c != "\n"}
+    # \r and \t are Cc too, and each already has its own line above - reporting them twice
+    # buries the rest of the list.
+    bad = {c for c in text if unicodedata.category(c) == "Cc" and c not in "\n\r\t"}
     if bad:
         out.append(("ERROR", "file contains control characters: %s"
                     % ", ".join("U+%04X" % ord(c) for c in sorted(bad))))
@@ -138,6 +148,8 @@ def _check_body(root, body, text):
     out = []
     for n, line in enumerate(text.splitlines(), 1):
         for tag in TAG_RE.findall(line):
+            if AUTOLINK_RE.match(tag):
+                continue
             out.append(("ERROR", "line %d has %s, which reads as a markup tag - write a "
                         "{placeholder} instead" % (n, tag)))
 

@@ -135,6 +135,11 @@ class Body(SkillDir):
         self.write(GOOD.replace("Body text.", "Write it to {TICKER}-report.html."))
         self.assertClean()
 
+    def test_a_markdown_autolink_is_not_a_tag(self):
+        self.write(GOOD.replace("Body text.", "Source: <https://github.com/o/r>, "
+                                              "questions to <me@example.com>."))
+        self.assertClean()
+
     def test_a_comparison_operator_is_not_a_tag(self):
         self.write(GOOD.replace("Body text.", "Grade it when EPS growth >= 25% and debt < 1.0."))
         self.assertClean()
@@ -148,8 +153,11 @@ class Body(SkillDir):
         self.assertError("refers to references/missing.md")
 
     def test_a_long_body_is_a_warning_not_an_error(self):
-        self.write(GOOD + "\n" + "filler words here and there. " * 1200)
-        self.assertWarn("guidance: under 5000")
+        # Sized off the constant, not a literal: the guidance is meant to be retuned as the
+        # skill grows, and a test that hardcodes the number turns every retune into a failure.
+        filler = "filler words here and there. " * ((cs.SOFT_MAX_WORDS // 5) + 200)
+        self.write(GOOD + "\n" + filler)
+        self.assertWarn("guidance: under %d" % cs.SOFT_MAX_WORDS)
         self.assertEqual(self.findings("ERROR"), [])
 
 

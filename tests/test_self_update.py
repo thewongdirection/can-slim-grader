@@ -133,6 +133,33 @@ class Writing(TempRoot):
                   if n.startswith(".self-update-")]
         self.assertEqual(litter, [])
 
+    def test_a_file_the_update_adds_is_not_left_private(self):
+        # mkstemp creates at 0600; an installed file has to be as readable as the umask allows,
+        # or an update makes the skill unreadable to every other account on the machine.
+        su.write_tree(self.root, {"scripts/added.py": b"x"}, ["scripts/added.py"])
+        mask = os.umask(0)
+        os.umask(mask)
+        mode = os.stat(os.path.join(self.root, "scripts", "added.py")).st_mode & 0o777
+        self.assertEqual(mode, 0o666 & ~mask)
+
+    def test_refuses_to_write_outside_the_install_root(self):
+        # read_zip already drops these, so nothing hostile reaches write_tree today. This pins
+        # the second line of defence: bytes from a downloaded archive land on disk here, and
+        # that must not depend on a caller three functions away having sanitised the path.
+        parent = os.path.dirname(self.root)
+        written, failed = su.write_tree(
+            self.root,
+            {"../escape.md": b"pwned", "/etc/passwd": b"pwned", "a/../../b.md": b"pwned",
+             "SKILL.md": b"legit"},
+            ["../escape.md", "/etc/passwd", "a/../../b.md", "SKILL.md"])
+        self.assertEqual(written, ["SKILL.md"])
+        self.assertEqual(sorted(r for r, _ in failed),
+                         ["../escape.md", "/etc/passwd", "a/../../b.md"])
+        self.assertTrue(all("refused" in why for _, why in failed))
+        self.assertFalse(os.path.exists(os.path.join(parent, "escape.md")))
+        self.assertFalse(os.path.exists(os.path.join(parent, "b.md")))
+        self.assertTrue(os.path.isfile(os.path.join(self.root, "SKILL.md")))
+
     def test_reports_failures_without_raising(self):
         with mock.patch.object(su.os, "replace", side_effect=OSError("read-only")):
             written, failed = su.write_tree(self.root, {"a.md": b"x"}, ["a.md"])
@@ -343,6 +370,25 @@ class GitMode(unittest.TestCase):
         self.assertTrue(network)
         self.assertTrue(all(t == 7 for t in network), seen)
 
+    def test_a_branch_that_is_not_the_tracked_one_is_never_fast_forwarded(self):
+        # git merge --ff-only moves whatever HEAD points at, so a feature branch would silently
+        # be dragged onto main's tip.
+        self.publish()
+        self.git(self.clone, "checkout", "-q", "-b", "experiment")
+        res = self.check(apply_update=True)
+        self.assertEqual(res["status"], "blocked")
+        self.assertIn("experiment", res["detail"])
+        self.assertEqual(read(self.clone, "SKILL.md"), "v1")
+        self.assertEqual(self.git(self.clone, "rev-parse", "--abbrev-ref", "HEAD"), "experiment")
+
+    def test_a_detached_head_is_never_fast_forwarded(self):
+        self.publish()
+        self.git(self.clone, "checkout", "-q", "--detach", "HEAD")
+        res = self.check(apply_update=True)
+        self.assertEqual(res["status"], "blocked")
+        self.assertIn("detached", res["detail"])
+        self.assertEqual(read(self.clone, "SKILL.md"), "v1")
+
     def test_no_stamp_is_written_for_a_git_install(self):
         self.publish()
         self.check(apply_update=True)
@@ -394,6 +440,25 @@ class Robustness(TempRoot):
 
         def fetch(url, timeout, accept="*/*", limit=None):
             return SHA.encode() if "api.github.com" in url else b"<html>proxy says no</html>"
+
+        res = su.check(self.root, repo="o/r", branch="main", timeout=1, fetch=fetch,
+                       apply_update=True)
+        self.assertEqual(res["status"], "unknown")
+        self.assertEqual(read(self.root, "SKILL.md"), "old")
+
+    def test_a_corrupt_archive_is_unknown_not_a_traceback(self):
+        # A body that unzips far enough to start inflating and then turns to garbage raises
+        # zlib.error, which is not an OSError - step 0 must still end in STATUS: unknown.
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+            z.writestr("can-slim-grader-main/SKILL.md", "hello world " * 20000)
+        blob = bytearray(buf.getvalue())
+        start = 30 + len("can-slim-grader-main/SKILL.md")
+        blob[start:start + 40] = b"\xff" * 40
+        write(self.root, "SKILL.md", "old")
+
+        def fetch(url, timeout, accept="*/*", limit=None):
+            return SHA.encode() if "api.github.com" in url else bytes(blob)
 
         res = su.check(self.root, repo="o/r", branch="main", timeout=1, fetch=fetch,
                        apply_update=True)
@@ -593,6 +658,18 @@ class RetiredFiles(TempRoot):
         res = su.check(self.root, repo="o/r", branch="main", timeout=1, apply_update=True,
                        fetch=fake_fetch({"SKILL.md": "v2"}, sha=OTHER))
         self.assertEqual(res["removed"], [])
+
+    def test_a_retirement_that_could_not_be_deleted_stays_in_the_stamp(self):
+        # Dropping it from the file list would orphan the retired reference for ever: the next
+        # run would have no record that we were the ones who put it there.
+        self.install({"SKILL.md": "v1", "references/old.md": "retired upstream"})
+        with mock.patch.object(su.os, "remove", side_effect=OSError("busy")):
+            res = su.check(self.root, repo="o/r", branch="main", timeout=1, apply_update=True,
+                           fetch=fake_fetch({"SKILL.md": "v2"}, sha=OTHER))
+        self.assertEqual(res["status"], "updated")
+        self.assertEqual(res["removed"], [])
+        self.assertIn("could not be deleted", res["detail"])
+        self.assertIn("references/old.md", su.read_stamp(self.root)["files"])
 
     def test_the_stamp_records_what_upstream_holds(self):
         write(self.root, "SKILL.md", "v1")

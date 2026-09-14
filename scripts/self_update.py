@@ -62,6 +62,7 @@ import time
 import urllib.parse
 import urllib.request
 import zipfile
+import zlib
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 REPO = "thewongdirection/can-slim-grader"
@@ -85,8 +86,11 @@ STAGE_PREFIX = "can-slim-grader-upstream-"
 STAGE_TTL = 3600.0
 
 # Everything a fetch can fail with, including a body that is not the archive we asked for
-# (a proxy interstitial, an HTML error page, a truncated transfer).
-NET_ERRORS = (OSError, ValueError, http.client.HTTPException, zipfile.BadZipFile)
+# (a proxy interstitial, an HTML error page, a truncated transfer). zlib.error and EOFError are
+# what a half-decompressible member raises, and they are not OSError - without them a mangled
+# archive would come out of here as a traceback instead of STATUS: unknown.
+NET_ERRORS = (OSError, ValueError, EOFError, zlib.error,
+              http.client.HTTPException, zipfile.BadZipFile)
 
 # A git object id: 40 hex, or 64 in a sha256 repository.
 SHA_RE = re.compile(r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")
@@ -336,20 +340,43 @@ def remove_tree(root, rels):
     return removed, failed
 
 
+def default_mode():
+    """What a plain open(..., "w") would have produced here: 0666 masked by the umask.
+
+    mkstemp deliberately creates at 0600, which is right for a temp file and wrong for an
+    installed one - a file added by an update would otherwise be unreadable to every other
+    account on the machine, unlike the same file in a git clone.
+    """
+    mask = os.umask(0)
+    os.umask(mask)
+    return 0o666 & ~mask
+
+
 def write_tree(root, remote, rels):
-    """Rewrite each path atomically, keeping the existing file mode. (written, failed)."""
+    """Rewrite each path atomically. (written, failed).
+
+    An existing file keeps its own mode; a file the update adds gets the umask's, not
+    mkstemp's private 0600.
+    """
     written, failed = [], []
+    fresh = default_mode()
     for rel in rels:
+        # Defence in depth. read_zip already drops anything safe_rel rejects, so nothing hostile
+        # reaches here today - but this is the last step before bytes from a downloaded archive
+        # land on disk, and it should not depend on a caller three functions away having
+        # sanitised them. A path that would escape the install root is refused, not written.
+        if safe_rel(rel) != rel:
+            failed.append((rel, "refused: not a safe path inside the install root"))
+            continue
         dest = os.path.join(root, *rel.split("/"))
         tmp = None
         try:
             os.makedirs(os.path.dirname(dest), exist_ok=True)
-            mode = os.stat(dest).st_mode & 0o7777 if os.path.exists(dest) else None
+            mode = os.stat(dest).st_mode & 0o7777 if os.path.exists(dest) else fresh
             fd, tmp = tempfile.mkstemp(dir=os.path.dirname(dest), prefix=".self-update-")
             with os.fdopen(fd, "wb") as f:
                 f.write(remote[rel])
-            if mode is not None:
-                os.chmod(tmp, mode)
+            os.chmod(tmp, mode)
             os.replace(tmp, dest)
             tmp = None
             written.append(rel)
@@ -519,6 +546,7 @@ def _mode(state):
 
 def _check_git(res, root, state, timeout, apply_update):
     sha, branch = res["upstream"], res["branch"]
+    checked_out = state.get("branch")
     if not state["usable"]:
         res["detail"] = ("this is a git checkout but git could not read it (no git on PATH, or a "
                          "broken .git) - refusing to rewrite a clone file by file; install git "
@@ -557,6 +585,15 @@ def _check_git(res, root, state, timeout, apply_update):
     if state["dirty"]:
         res["status"] = "blocked"
         res["detail"] = "the working tree has uncommitted changes - not fast-forwarding over them"
+        return
+    if checked_out != branch:
+        # git merge --ff-only moves whatever HEAD points at. On a feature branch or a detached
+        # HEAD that silently drags somebody else's ref onto the branch tip.
+        res["status"] = "blocked"
+        res["detail"] = ("this clone has %s checked out, not %s - check out %s and re-run rather "
+                         "than fast-forwarding a different ref onto it"
+                         % ("a detached HEAD" if checked_out in ("HEAD", "?", None)
+                            else "branch %s" % checked_out, branch, branch))
         return
     rc, _ = git(root, "merge", "--ff-only", sha, timeout=timeout)
     if rc != 0:
@@ -633,15 +670,20 @@ def _check_files(res, root, timeout, apply_update, stamp, fetch, writable=True):
                             _staged_note(res["staged"])))
         return
     # Only ever the files an earlier run installed that upstream has since dropped.
-    res["removed"], _ = remove_tree(root, res["removed"])
+    res["removed"], unremoved = remove_tree(root, res["removed"])
     res["status"] = "updated"
     res["local"] = sha
-    res["detail"] = ("installed %d file(s) from %s@%s%s"
+    res["detail"] = ("installed %d file(s) from %s@%s%s%s"
                      % (len(written), repo, branch,
                         ", removed %d retired upstream" % len(res["removed"])
-                        if res["removed"] else ""))
+                        if res["removed"] else "",
+                        "; %s could not be deleted (%s)" % (unremoved[0][0], unremoved[0][1])
+                        if unremoved else ""))
     if stamp:
-        write_stamp(root, repo, branch, sha, remote)
+        # A retirement that failed stays in the stamp, or the next run has no record that we
+        # put the file there and it is orphaned in references/ for ever.
+        write_stamp(root, repo, branch, sha,
+                    set(remote) | {rel for rel, _ in unremoved})
 
 
 def _staged_note(staged):
