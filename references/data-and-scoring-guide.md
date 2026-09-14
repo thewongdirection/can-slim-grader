@@ -84,6 +84,36 @@ Cross-checked 2026-08: TradingView's `price_52_week_high` (799.87) and ROE (131.
 IBKR snapshot and the company's filings exactly, and its daily bars were **fresher than the IBKR
 connector's** in the same session.
 
+### Rate limit — discovered every run, never assumed
+
+**TradingView documents no limit for these endpoints, and it refuses rather than warns.** A
+successful response carries no `limit`/`remaining`/`reset` field to pace off; a refused one comes
+back as `{"success": false, "rate_limited": true, "error": "...403 Forbidden for url
+'https://scanner.tradingview.com/america/scan'"}`. So the ceiling is **established each run and
+adjusted from what actually happens**, and `scripts/tv_throttle.py` enforces it.
+
+| | |
+|---|---|
+| **Hard bound** | **100 requests/minute**, never reached — the throttle spends **80%** of whatever limit is believed (80/min out of the box). |
+| **Per endpoint** | `scanner` (`get_quote`, `get_symbol_data`, `run_screener`, `search_symbols`, the technicals tools) and `chart` (`get_ohlcv` and the structure tools) are limited **separately** — observed: both scanner tools refused while `get_ohlcv` answered in the same second. Fundamentals, news and anything unmapped get their own lanes under the global cap. |
+| **On a refusal** | that endpoint's ceiling is **halved** (floor 5/min) and it cools down for the server's `retry_after`, else 30s → 60s → 120s → 300s. Only the refused endpoint backs off. |
+| **Recovery** | after 20 clean calls and 2 quiet minutes the ceiling creeps back +5/min, never above the 60/min default. Learned ceilings persist between runs. |
+
+The loop, per call: `wait --tool <name>` → make the call → `observe --tool <name> -` with the
+response. `observe` is what keeps the limit current — it distinguishes a real refusal (the
+server's `rate_limited` flag, a 429, "too many requests") from a plain error like a bad symbol,
+which must **not** slow the run down. If a limit is ever actually established — advertised by a
+newer server build, documented by TradingView, or given by the user — record it with
+`set-limit --family <lane> --per-minute <N> --source "<where>"` and every budget re-derives from
+it. Never raise the ceiling on a guess.
+
+**A rate-limited call is a missing figure, not a guessable one.** Wait out the cooldown, retry
+once, then take that letter down the ladder below and record the row in
+`CONFIG.dataStatus.items` as `carried` or `unavailable` with a `why` naming the limit — the same
+fallback discipline as any other dead source. A single-ticker grade is ~6-8 TradingView calls,
+comfortably inside any plausible limit, so being throttled on one is a fact about the connector
+worth reporting, not a pacing mistake to hide.
+
 ---
 
 The IBKR connector (if available) supplies **live price/volume, 52-week stats, and
@@ -114,7 +144,10 @@ cover **C/A** and P/E/ROE, **but are often plan-gated (HTTP 403 NOT_AUTHORIZED)*
 C/A from the fundamental ladder below. (Verified 2026-07: aggregates + ticker-overview entitled;
 financials/ratios/earnings needed a plan upgrade. Cross-check: Massive bars reproduced the
 IBKR-based RS and % off high exactly.)
-**Rate limit — throttle Massive to at most 5 calls per minute** (space them ~12s apart). Batch
+**Rate limit — throttle Massive to at most 5 calls per minute** (space them ~12s apart) — far
+tighter than TradingView's, and unrelated to it; pace it with
+`scripts/tv_throttle.py --family other` after `set-limit --family other --per-minute 5` if you
+want the same bookkeeping. Batch
 to stay under it: one `/v2/aggs` call per ticker for daily and one for weekly, fetch SPY's bars
 **once** and reuse the stored table across tickers, and prefer `query_data` (SQL over stored
 tables) over re-fetching. A typical single-ticker grade needs only ~3-4 Massive calls (ticker

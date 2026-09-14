@@ -34,11 +34,12 @@ INCLUDE = [
     ("references/data-and-scoring-guide.md", "What data to gather, from where, and the pass/partial/fail rubric"),
     ("scripts/relative_strength.py", "RS proxy, % off 52-week high, base metrics, breakout volume"),
     ("scripts/chart_data.py", "Builds the report's candlestick/EMA/volume block from daily bars"),
+    ("scripts/tv_throttle.py", "Paces TradingView calls under the rate limit the run discovers"),
     ("scripts/html_to_pdf.py", "Renders the filled HTML to an A4 PDF (optional - engine-dependent)"),
     ("assets/evaluation_template.html", "The report itself: fill CONFIG, it renders and audits itself"),
 ]
 # Repo housekeeping that means nothing outside this git repo.
-OMITTED = ["scripts/check_parity.py", "parity-manifest.json", "README.md"]
+OMITTED = ["scripts/check_parity.py", "parity-manifest.json", "README.md", "tests/"]
 
 PREAMBLE = '''# can-slim-grader - portable bundle
 
