@@ -2,3 +2,19 @@ __pycache__/
 *.pyc
 .DS_Store
 .skill-version
+
+# Credentials. This skill needs none - its only network call is unauthenticated and market data
+# comes through an MCP connector - so anything matching these is here by accident. Blocked at the
+# source rather than caught in review, because a secret is only un-committed by rewriting history.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+secrets.*
+*_rsa
+*_ed25519
+.netrc
