@@ -194,15 +194,37 @@ daily + weekly + SPY daily + ticker overview), well within the limit.
 
 ---
 
-## Fundamental source priority (use the highest that's connected)
+## Source priority (use the highest that's connected)
 
-Same ladder as the screener — prefer real financial data over generic web search:
+**Three sources have earned the top of this ladder by being reliable in practice: SEC filings,
+TradingView, and IBKR.** Everything below them is a fallback, and several have been observed
+plan-gated or refusing outright. Prefer the highest that is connected *for the kind of data you
+need* — filings are authoritative for fundamentals, the market feeds for price and volume:
 
-1. **TradingView** (`Trading_View` MCP) — **the default**, and the only source here that also
-   supplies the bars. `get_financial_history` (fq + fy) for **C**/**A**, `get_earnings_history`
+| Need | First | Then | Then |
+|---|---|---|---|
+| **C, A** — quarterly & annual EPS/sales, ROE | **SEC filings** (10-K/10-Q via `securities-filings-lookup` / EDGAR XBRL) | **TradingView** `get_financial_history` + `get_earnings_history` | the fallbacks below |
+| **N, S, L, M** — bars, 52-week stats, volume | **TradingView** `get_ohlcv` / `get_symbol_data` | **IBKR** `get_price_history` / `get_price_snapshot` | the fallbacks below |
+| **I** — institutional sponsorship | **SEC** 13F / Form 4 | web aggregators, stated as such | — |
+
+**Why filings first for C and A.** They are the numbers the company is legally accountable for, and
+they do not carry a vendor's derivation quirks — the two traps documented above (a GAAP/street EPS
+gap, and TTM fields that break across a spin-off) are both vendor artefacts that a filing does not
+have. Use the filing for the figure and TradingView for the street consensus it is measured against,
+which is the one thing the filing cannot give you.
+
+**Why TradingView before IBKR for price.** It carries both halves — bars *and* fundamentals — its
+daily bars have been observed fresher than the IBKR connector's in the same session, and IBKR quotes
+here are 15-minute delayed. IBKR is the better second opinion precisely because it is independent:
+when the two disagree about the newest bar, say which one the report used.
+
+Then, in order, the fallbacks:
+
+1. **TradingView** (`Trading_View` MCP) — also the only source here that supplies the bars.
+   `get_financial_history` (fq + fy) for **C**/**A**, `get_earnings_history`
    for the street EPS actual/estimate and the next report date, `get_financials` for ROE, margins,
    debt/equity and market cap. Read the four caveats above before grading off it. No 13F data, so
-   **I** falls to #6/#7.
+   **I** comes from SEC filings.
 2. **Daloopa** (`daloopa:*`, e.g. `daloopa:tearsheet`) — model-ready quarterly & annual EPS,
    sales, margins, ROE, KPIs. Best for **C** and **A**.
 3. **bigdata.com** (`bigdata-com:*`, e.g. `company-brief`, `earnings-digest`,

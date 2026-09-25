@@ -2,24 +2,29 @@
   "sister": "https://github.com/thewongdirection/can-slim-recommend",
   "note": "sha256 of the files shared verbatim with can-slim-recommend. Update ONLY in the same commit that ports the change to the sister repo.",
   "files": {
-    "references/canslim-methodology.md": "681c5c7678d2fde9c9860cb5be5a01364528261f3f0e08e3f9917057abaef101",
+    "references/canslim-methodology.md": "80d39e626310537151819ec7e1e13b998ab3b3e46c6717ee0d56ae1bccab6bcd",
     "scripts/relative_strength.py": "dc9138f940302437c840b6ffc0ad24a283b07ba4550bb40b2629e046b8c25e74"
   },
   "pending_port": [
     {
       "commit": "1d21fe8",
       "summary": "Per-endpoint adaptive TradingView throttle (scripts/tv_throttle.py)",
-      "why": "The sister has its OWN 378-line tv_throttle.py with a --wait design, not this one. It lacks the 100/min hard bound, the per-endpoint (scanner vs chart) lanes, the learned ceiling_rpm and the AIMD recovery. Its observed signal ('Rate limit exceeded. Retry after 32s') IS already handled by this repo's detect_limit, so the port is additive rather than a rewrite."
+      "why": "The sister has its own 378-line --wait throttle, not this one. It lacks the 100/min hard bound, the per-endpoint lanes, the learned ceiling and the AIMD recovery. Its observed signal ('Rate limit exceeded. Retry after 32s') is already handled here."
+    },
+    {
+      "commit": "0f4c73c",
+      "summary": "Weekly chart fallback once a run covers 3+ tickers (chart_data.py --interval)",
+      "why": "Material to the screener above all: every sweep covers many tickers and hits the bars-per-ticker wall this fixes."
     },
     {
       "commit": "(this commit)",
-      "summary": "Weekly chart fallback once a run covers 3+ tickers (chart_data.py --interval)",
-      "why": "Material to the screener above all: it sweeps sector by sector, so EVERY run covers many tickers and hits the bars-per-ticker wall this fixes. A daily 200-period line needs ~500 bars per name; a weekly 40-period line ~190. Without it a multi-name run silently ships charts whose long-term average starts partway across."
+      "summary": "scripts/rubric.py + the 100-ticker parity test, and the price/liquidity floor on S",
+      "why": "rubric.py is the shared thresholds as code; the sister should import or mirror it so the two cannot drift again. The parity test found the real gap it now guards: this repo had no price floor, so a sub-$15 name the screener DROPS was being graded here with S open. The floor now fails S, which is the same judgement placed where a single-ticker grade can express it."
     },
     {
       "commit": "(outstanding in the sister)",
-      "summary": "relative_strength.py: ret_over tolerance, and dict-bar input",
-      "why": "Drift the OTHER way - this repo has it, the sister does not. ret_over here clamps to the oldest bar when the series is within 90% of the window (IBKR's ONE_YEAR returns ~251 bars for a 252-session lookback); the sister returns None, so the same data yields a 12-month RS here and a blank there. That is a computed number differing between the skills. as_row/normalize (accepting TradingView {t,o,h,l,c,v} dicts) is input-format only, not maths."
+      "summary": "relative_strength.py ret_over tolerance and dict-bar input; prose/code splits",
+      "why": "Drift the other way. ret_over here clamps to the oldest bar within 90% of the window (IBKR's ONE_YEAR gives ~251 bars for a 252-session lookback); the sister returns None, so the same data yields a 12-month RS here and a blank there. Separately, the sister's own prose and code disagree on two points its code should win: L's pass (prose says #1-2 in group, code caps at top-half) and the >25%-above-50-day case (prose says FAIL, code raises a flag)."
     }
   ]
 }

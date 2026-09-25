@@ -114,6 +114,11 @@ allowed; an undated or silently stale one is not. For the ticker you name it:
   a HOST NOTES preamble that says what data the host must supply and how to read the
   Claude-specific parts (MCP connectors, `ToolSearch`, sibling skills). `--zip` also writes a zip
   of the raw files. Re-run it after any change so the portable copy doesn't drift.
+- `scripts/rubric.py` — the CAN SLIM letter thresholds as code: the pivot band and N's fail line,
+  the price/liquidity floors and volume bands behind S, L's laggard test, the pass/partial/fail
+  weights and the score bands. It exists so the pair can be *tested* for agreement instead of
+  trusted to it — `tests/test_rubric_parity.py` grades 100 real tickers through it and through
+  `can-slim-recommend`'s own `sector_screen.py` and requires the two to match. Standard library only.
 - `tests/` — regression tests for `scripts/tv_throttle.py` (the rate-limit budget and its
   bound, per-endpoint backoff, refusal detection, recovery, state handling), for
   `scripts/self_update.py` (archive handling, the file-by-file update and its retirements,

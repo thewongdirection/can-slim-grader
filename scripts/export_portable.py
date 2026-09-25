@@ -39,8 +39,11 @@ INCLUDE = [
     ("assets/evaluation_template.html", "The report itself: fill CONFIG, it renders and audits itself"),
 ]
 # Repo housekeeping that means nothing outside this git repo.
+# Repo housekeeping, plus scripts/rubric.py: it encodes the same thresholds the bundled
+# methodology already states in prose, and exists to be diffed against the sister skill - which a
+# host running this bundle has no copy of.
 OMITTED = ["scripts/check_skill.py", "scripts/check_parity.py", "scripts/self_update.py",
-           "parity-manifest.json", "README.md", "tests/"]
+           "scripts/rubric.py", "parity-manifest.json", "README.md", "tests/"]
 
 PREAMBLE = '''# can-slim-grader - portable bundle
 

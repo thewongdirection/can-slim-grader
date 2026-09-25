@@ -58,10 +58,12 @@ fundamental source-priority ladder, and the pass/partial/fail rubric per letter.
   **Every TradingView call goes through `scripts/tv_throttle.py`** — TradingView publishes no
   rate limit and refuses rather than warns, so the ceiling is discovered, not looked up. See
   step 2.
-- **Alternates for price/volume** (N/S/L/M) when TradingView is not connected: the **IBKR MCP
-  connector** (read-only market data; 52-week stats + the stock's group) or **Massive Market
-  Data** (Polygon-style `/v2/aggs` bars). Both feed `scripts/relative_strength.py` too.
-  **Throttle Massive to at most 5 calls/minute** (see the data guide for batching).
+- **Alternates for price/volume** (N/S/L/M): the **IBKR MCP connector** (read-only; 52-week stats
+  + the stock's group), then **Massive** (Polygon-style `/v2/aggs`, **max 5 calls/min**). Both feed
+  `scripts/relative_strength.py` unedited.
+- **Top of the ladder, in order: SEC filings, TradingView, IBKR** — the three that have proved
+  reliable. Filings are authoritative for **C**/**A**/**I**, TradingView for bars and street
+  consensus, IBKR as the independent check on price. Table in the data guide.
 - **Alternates for fundamentals**: Daloopa / bigdata.com / LSEG / Massive / **FMP** (often
   plan-gated — `statements` and `quote` returned ACCESS DENIED in an August-2026 check) / SEC
   EDGAR through `securities-filings-lookup`, else **web search**. See the ladder in the data guide.
@@ -103,14 +105,10 @@ from the branch archive in a plain unpacked install — and prints a final `STAT
   means carry on and report it. A dated grade from a slightly older copy beats no grade at all —
   the same rule as step 1's carried-over data, applied to the rules themselves.
 - **Don't hand-edit an installed copy.** In a plain unpacked install `--apply` replaces every file
-  that differs from upstream, and deletes the ones an earlier update installed that upstream has
-  since retired — that is the point of it. Keep changes in a git clone, where the script refuses to
-  touch a dirty or diverged tree, and read the parity section before changing any rule. A copy
-  committed inside a larger repo is never rewritten at all: the script says so and leaves the
-  update to that repo.
-- It touches **no user data**, and writes nothing outside this skill's own directory — with
-  one exception: a read-only install, where it unpacks the newer copy into a temp directory
-  and names the path so this run can follow the newer rules from there.
+  that differs from upstream and retires the ones upstream dropped. Keep changes in a git clone,
+  where the script refuses to touch a dirty or diverged tree. It touches **no user data** and writes
+  nothing outside this skill's directory, except a read-only install, where it stages the newer copy
+  in a temp directory and names the path.
 
 ### 1 — Pull fresh every run; if you can't, say so in the report and date what you used
 **A grade is only as good as the moment it was measured — and the report has to say when that
@@ -159,27 +157,23 @@ In order:
   connected feeds disagree about the newest bar, say which one the report used.
 
 ### 2 — Check TradingView's limit, then pace every call under it
-TradingView publishes no rate limit and **refuses rather than warns** — `{"success": false,
-"rate_limited": true, ...}` — and a successful response carries no budget to pace off. So the
-limit is discovered every run and `scripts/tv_throttle.py` holds the run under it: never more
-than **100 requests/minute**. **The data guide has the full rules**; the procedure is:
+TradingView publishes no rate limit and **refuses rather than warns** (`{"success": false,
+"rate_limited": true, ...}`), so the limit is discovered every run and `scripts/tv_throttle.py`
+holds the run under it — never more than **100 requests/minute**. **Full rules in the data guide.**
 
-1. `python3 scripts/tv_throttle.py status` — the budget carried over, including any lower ceiling
-   a refusal already taught it. Start here every run.
-2. Check the responses you are already getting for a limit TradingView advertises (`rate_limited`,
-   `retry_after`, `limit`/`remaining`/`reset`); today it sets only `rate_limited`. Adopt a number
-   only if one is genuinely established, with
-   `set-limit --family scanner --per-minute {N} --source "{where}"`. Otherwise keep the default —
-   an undocumented limit is not licence to go faster.
+1. `python3 scripts/tv_throttle.py status` — the budget carried over, including any lower ceiling a
+   refusal already taught it. Start here every run.
+2. Adopt a number only if one is genuinely established (advertised, documented, or given by the
+   user): `set-limit --family scanner --per-minute {N} --source "{where}"`. Otherwise keep the
+   default — an undocumented limit is not licence to go faster.
 3. Pace every call: `wait --tool {tool_name}` → make the call → pipe the response to
-   `observe --tool {tool_name} -`. **`observe` is the "always check" half**, re-deriving the
-   ceiling from what the connector actually did. `wait` gives up rather than stall the run (exit
-   3 — use the source ladder); an over-large batch is refused (exit 4 — split it).
+   `observe --tool {tool_name} -`. **`observe` is the "always check" half**, re-deriving the ceiling
+   from what the connector actually did. Exit 3 means use the source ladder; exit 4, split the batch.
 
-**Back off per endpoint, not per connector** — `get_symbol_data` and `get_quote` were refused in
-one observed check while `get_ohlcv` answered in the same second. **On a refusal never fabricate
-the figure**: wait out the cooldown, retry once, then drop down the source ladder and record the
-row in `CONFIG.dataStatus.items` as `carried`/`unavailable` with a `why` naming the rate limit.
+**Back off per endpoint, not per connector** — `get_symbol_data` and `get_quote` were refused in one
+observed check while `get_ohlcv` answered in the same second. **On a refusal never fabricate the
+figure**: wait out the cooldown, retry once, then drop down the ladder and record the row in
+`CONFIG.dataStatus.items` as `carried`/`unavailable` with a `why` naming the rate limit.
 
 ### 3 — Resolve the ticker
 TradingView: `search_symbols` → the `EXCHANGE:TICKER` id (e.g. `NASDAQ:WDC`); `get_financials`
@@ -382,6 +376,13 @@ substance, adapt the framing.
    `python scripts/check_skill.py` and `python scripts/check_parity.py`.** The tests cover the
    scripts; the first check refuses a `SKILL.md` that would not import; the second hashes the
    shared files against `parity-manifest.json` and names exactly what drifted.
+1b. **The 100-ticker parity test must stay green on every upgrade.** It runs inside step 1:
+   `tests/test_rubric_parity.py` grades 100 real tickers through `scripts/rubric.py` (the shared
+   thresholds, as code) and — when a sister clone is on disk — through the sister's own
+   `sector_screen.py`, requiring agreement row for row. That live half catches drift no hash can see,
+   so **clone the sister before committing a rule change** and check it ran rather than skipped:
+   `CANSLIM_SISTER=/path/to/can-slim-recommend python3 -m unittest tests.test_rubric_parity -v`.
+   The test's own docstring explains what it compares and why.
 2. If a shared file changed — or if you changed a rule in the material list above, **which the
    script cannot detect** — port the same change to
    **https://github.com/thewongdirection/can-slim-recommend**. Add the repo to the session first

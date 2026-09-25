@@ -305,7 +305,11 @@ decision — the C/A/L + N gate above decides the label.
 - **A.** A company without three years of record — newly public, or freshly restructured — **cannot
   exceed PARTIAL on A**, however good the two years it has.
 - **S.** A stock **below its 200-day** fails S. A PASS wants breakout volume **>=40-50% above the
-  50-day average**, not merely healthy liquidity.
+  50-day average**, not merely healthy liquidity. The method's **price and liquidity floors land on
+  S**: under ~$15 (Nasdaq; ~$20 NYSE) or under ~$20M a day, a stock is not institutionally ownable,
+  so S fails whatever the volume pattern looks like. A screener DROPS such a name because it is
+  choosing among thousands; a single-ticker grade cannot drop the name it was asked about, so it
+  grades it with S failed and says why. Same judgement, different place to put it.
 - **L.** PASS needs clear outperformance **and** the #1 or #2 name in a strong group. Outperforming
   but mid-pack, or leading a group that itself lags, is PARTIAL. **In line with the benchmark is a
   FAIL** — matching the index is not leadership.
