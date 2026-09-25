@@ -358,11 +358,18 @@ const CONFIG = {
   // edge of the chart.
   // Leave `bars` empty to hide the entire chart section.
   priceChart: {
-    windowLabel: "last 300 sessions", // shown next to the section title
+    // A WEEKLY chart is the right fallback when one run charts several tickers: a daily 200-period
+    // line needs ~500 bars per ticker, a weekly 40-period line ~190. Build it with
+    //   python scripts/chart_data.py {weekly-bars}.json --interval weekly --js
+    // which sets the window, the 10/40-week averages, the volume average and the labels together.
+    // Use ONE interval for every ticker in a run, or the set is not comparable.
+    windowLabel: "last 300 sessions", // shown next to the section title; "last 150 weeks" if weekly
     window: 300,                      // sessions to display if `bars` is longer (300 ~= 14 months)
     bars: [],                         // [ "YYYY-MM-DD", open, high, low, close, volume ], oldest first
     ema50: [],                        // aligned 1:1 with `bars`, null before seeding; omit to compute from bars
     ema200: [],
+    avgVolLabel: null,                // names the dashed line, e.g. "50-day average" / "10-week
+                                      // average"; chart_data.py sets it from --interval
     avgVol: null,                     // avg volume of the 50 sessions BEFORE the latest bar (dashed
                                       // line in the volume pane) - excluding the latest bar keeps a
                                       // surge day from inflating its own benchmark
@@ -596,7 +603,7 @@ $("letters").innerHTML = (CONFIG.letters||[]).map(L=>{
       swatch('pc-up','up day')+swatch('pc-dn','down day')+
       line('--ema50', labels[0], ma1[n-1])+ line('--ema200', labels[1], ma2[n-1])+
       '<span><span class="ln" style="border-top-style:dashed;border-color:var(--muted)"></span>'+
-      '50-day avg vol <b>'+fmtV(avgVol)+'</b></span>'+
+      esc(pc.avgVolLabel || '50-day average')+' vol <b>'+fmtV(avgVol)+'</b></span>'+
     '</div>'+
     '<div class="readout" id="pc-readout"></div>'+
     s.join('')+

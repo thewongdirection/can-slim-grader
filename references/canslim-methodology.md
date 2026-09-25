@@ -290,9 +290,30 @@ every period must clear it.
 
 **C, A and L weigh more in the verdict, not in the arithmetic.** They were the most predictive
 traits, so they gate the label rather than the number: a buy-range call needs C, A and L passing
-with a valid N, and no total earns it without them. Rough read of the total: **6-7** = leader in
-a strong tape; **4.5-5.5** = solid, buyable only on a proper pivot; **3-4** = watch, needs the
-market or a letter to improve; **under 3** = pass.
+with a valid N, and no total earns it without them. Rough read of the total: **6.0-7.0** = leader in
+a strong tape; **4.5-5.5** = qualifies, buyable when N gives a pivot; **3.5-4.0** = watch (needs the
+market or a letter to improve); **under 3.5** = pass on it. The bands are a summary, never the
+decision — the C/A/L + N gate above decides the label.
+
+**Rungs that are easy to grade too kindly**, and hold in both skills:
+
+- **N.** A pivot needs a sound base *and* new-high ground. More than ~10% below the 52-week high
+  there is no pivot, so N cannot pass; **more than ~20% below, N fails** — that is a broken chart,
+  not a base under repair. A wide-and-loose or late-stage base fails on its own. A PASS also
+  requires the stock to be no more than **~5% extended past** the pivot, and extension far above the
+  50-day (roughly **>25%**) after a climax run is a **FAIL**, not a partial: there is no entry there.
+- **A.** A company without three years of record — newly public, or freshly restructured — **cannot
+  exceed PARTIAL on A**, however good the two years it has.
+- **S.** A stock **below its 200-day** fails S. A PASS wants breakout volume **>=40-50% above the
+  50-day average**, not merely healthy liquidity.
+- **L.** PASS needs clear outperformance **and** the #1 or #2 name in a strong group. Outperforming
+  but mid-pack, or leading a group that itself lags, is PARTIAL. **In line with the benchmark is a
+  FAIL** — matching the index is not leadership.
+- **I.** A high ownership *level* alone is a **PARTIAL**. A PASS needs the trend verified as
+  **rising**, with quality funds adding and room left to add. Funds distributing is a FAIL.
+- **M.** **4-5 or more distribution days** in a ~25-session window, narrowing leadership, or an
+  index slipping under its 50-day is PARTIAL (uptrend under pressure); a confirmed correction is a
+  FAIL. Never loosen a cut to compensate for a weak tape.
 
 Per-skill scoring detail (what counts as partial for each letter, and the verdict definitions)
 lives in each skill's own data guide, not here.

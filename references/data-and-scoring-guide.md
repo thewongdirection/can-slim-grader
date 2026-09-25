@@ -84,6 +84,44 @@ Cross-checked 2026-08: TradingView's `price_52_week_high` (799.87) and ROE (131.
 IBKR snapshot and the company's filings exactly, and its daily bars were **fresher than the IBKR
 connector's** in the same session.
 
+### Chart interval — daily for one or two tickers, weekly for a run of three or more
+
+**The deciding constraint is bars per ticker.** A daily 200-day line needs ~200 sessions of history
+*before* the first visible candle, so a 300-session chart wants **~500 daily bars per name**. At
+three tickers that is 1,500+ bars, and the failure mode is silent: the chart still renders, the
+long-term average just starts partway across it, and nothing in the PDF says so unless the script's
+note is carried through.
+
+| Tickers in the run | Chart | Display | Averages | Bars needed per ticker |
+|---|---|---|---|---|
+| 1-2 | daily | 300 sessions (~14 months) | 50 / 200-day EMA, 50-day volume | daily `count=500`, weekly `count=104` |
+| **3 or more** | **weekly** | 150 weeks (~3 years) | 10 / 40-week EMA, 10-week volume | weekly `count=200`, daily `count=260` |
+
+```bash
+python scripts/chart_data.py {weekly-bars}.json --interval weekly --js
+```
+`--interval weekly` moves the window, both averages, the volume average, the labels and the
+staleness rule together, so there is nothing to set by hand and nothing to get half-right.
+
+**Why weekly is a lateral move, not a downgrade.** Bases are read on weekly charts — that is the
+timeframe the pattern work in `canslim-methodology.md` describes — and **40 weeks ≈ 200 sessions**,
+so the long-term line means the same thing. What changes is resolution, not the measurement.
+
+**Three rules that keep it honest:**
+
+1. **One interval for the whole run.** Mixing daily and weekly across a set makes the reports
+   non-comparable, and the reader cannot see the mismatch. Pick from the ticker count up front.
+2. **RS never changes.** `relative_strength.py` always runs on **daily** bars — its lookbacks are
+   63/126/252 sessions — so the chart interval cannot move a graded number. This is why the daily
+   pull stays at ~260 bars even when the chart is weekly.
+3. **Say which interval the set used**, in the chat reply and in the chart's own window label
+   ("last 150 weeks"). `--interval weekly` writes the label and `avgVolLabel` for you, so a weekly
+   volume average is never read as a daily one.
+
+A weekly bar is routinely several days old, so the weekly preset relaxes the staleness warning to
+10 days. That is about the bar's *age*, not about skipping the re-pull: bars are still pulled fresh
+every run.
+
 ### Rate limit — discovered every run, never assumed
 
 **TradingView documents no limit for these endpoints, and it refuses rather than warns.** A
@@ -274,6 +312,8 @@ Suggested rubric:
   one-time items.)
 - **A — Annual earnings.** PASS: EPS up each of last 3 yrs at ≥25%, ROE ≥17%. PARTIAL: growth
   10-25% or one down year recovered, or ROE 12-17%. FAIL: erratic/declining, ROE <12%.
+  **A company without three years of record — newly public, or freshly restructured — cannot
+  exceed PARTIAL**, however good the years it has.
 - **N — New + new high off a base.** PASS: a clear new product/management/industry driver **and**
   the stock breaking out to a **new high from a sound base** now (at/near pivot). PARTIAL: has
   a "new" driver but extended, or repairing a base (not at a pivot). FAIL: no new driver, or
@@ -284,20 +324,31 @@ Suggested rubric:
   high** is a lower high with overhead supply, not a buy point. A recent local high, a three-month
   high, or the top of a spike inside a downtrend does not qualify — an earnings gap that is still
   well below the 52-week high is base *repair*, and repair is a PARTIAL with no entry price.
-- **S — Supply & demand.** PASS: volume surging on up-moves / dry-up in the base, reasonable
-  float, buybacks, low debt, management ownership. PARTIAL: mixed. FAIL: heavy distribution,
-  bloated float, high debt/dilution.
-- **L — Leader or laggard.** PASS: RS clearly beating SPY (top tier; proxy well positive),
-  #1-3 in a strong group. PARTIAL: roughly in line with SPY. FAIL: lagging SPY / near 52-week
-  lows.
-- **I — Institutional sponsorship.** PASS: several quality funds, increasing owners, recent
-  buying. PARTIAL: adequate but flat, or over-owned. FAIL: little/no sponsorship.
-- **M — Market direction.** PASS: confirmed uptrend. PARTIAL: uptrend under pressure. FAIL:
-  correction/downtrend. (M is market-wide context, not stock-specific.)
+  **More than ~20% below the 52-week high, N fails** — that is a broken chart, not repair. A PASS
+  also needs the stock no more than **~5% extended** past the pivot, and extension roughly **>25%
+  above the 50-day** after a climax run is a **FAIL**: there is no entry there.
+- **S — Supply & demand.** PASS: breakout volume **≥40-50% above the 50-day average** (or a clear
+  dry-up in the base), reasonable float, buybacks, low debt, management ownership. PARTIAL:
+  institutional-grade liquidity and a constructive trend but no demand surge; mixed. FAIL: heavy
+  distribution, bloated float, high debt/dilution, **or the stock below its 200-day**.
+- **L — Leader or laggard.** PASS: RS clearly beating SPY (proxy well positive) **and** the #1 or
+  #2 name in a strong group. PARTIAL: outperforming but mid-pack in its group, or leading a group
+  that itself lags. FAIL: **in line with** or behind SPY — matching the index is not leadership —
+  or near 52-week lows.
+- **I — Institutional sponsorship.** PASS: quality funds and the trend **verified as rising**,
+  with room left to add. PARTIAL: adequate ownership whose trend you could not verify, flat
+  sponsorship, or over-owned — **a high ownership level alone is a PARTIAL**. FAIL: little/no
+  sponsorship, or funds distributing.
+- **M — Market direction.** PASS: confirmed uptrend, few distribution days, broad leadership.
+  PARTIAL: uptrend under pressure — **4-5 or more distribution days** in ~25 sessions, narrowing
+  leadership, or an index slipping under its 50-day. FAIL: confirmed correction/downtrend. (M is
+  market-wide context, not stock-specific.)
 
 ### The total is always out of 7
 
-**One point per letter, seven letters, maximum 7.00.** `pass` = 1, `partial` = 0.5, `fail` = 0,
+**One point per letter, seven letters, maximum 7.00.** Rough read: **6.0-7.0** leader in a strong
+tape · **4.5-5.5** qualifies, buyable when N gives a pivot · **3.5-4.0** watch · **under 3.5** pass
+on it. The bands summarise; the C/A/L + N gate decides the label. `pass` = 1, `partial` = 0.5, `fail` = 0,
 summed across exactly C-A-N-S-L-I-M. The report computes this itself and renders `{tally} / 7`, so
 a typed figure cannot contradict the rows above it; the self-audit flags a `scoreText` that
 disagrees with the letters or that states any denominator other than 7. Never rescale — no /70,

@@ -29,8 +29,17 @@ OUTPUT: JSON on stdout - paste it as CONFIG.priceChart in the filled dashboard. 
 `lastBar` / `barAgeDays` so the report states what the data is as-of, and the script warns (and
 annotates the chart) when the newest bar is stale - bars must be re-pulled every run, never reused.
 
+WEEKLY FALLBACK (a run covering several tickers): a daily 200-period line needs ~500 bars PER
+TICKER, so charting many names at daily depth either blows the run's budget or - worse - quietly
+ships charts whose long-term average starts partway across. `--interval weekly` switches the whole
+preset together (150 weeks on display, 10/40-week averages, a 10-week volume average, a staleness
+rule that tolerates a bar days old) and needs only ~200 bars per name. Weekly is the chart bases
+are read on and 40 weeks ~= 200 sessions, so it is a change of lens, not a downgrade. Pick ONE
+interval for the whole run: a set where some charts are daily and others weekly is not comparable.
+
 Usage:
   python chart_data.py nvda_daily.json                     # last 300 sessions, 50/200 EMA
+  python chart_data.py wdc_weekly.json --interval weekly    # 150 weeks, 10/40-week EMA
   python chart_data.py tv_ohlcv.json --window 300 --js     # TradingView get_ohlcv output, as-is
   python chart_data.py nvda_daily.json --window 300 --js   # ready-to-paste "priceChart: {...},"
   python chart_data.py bars.json --type sma                # 50/200 simple MAs instead
@@ -46,6 +55,18 @@ import sys
 
 MONTH_SESSIONS = 21   # ~21 trading sessions per month
 DEFAULT_WINDOW = 300  # sessions on display (~14 months) - long enough for the 200-day EMA to mean something
+
+# Per-interval defaults. A daily chart is the default and is unchanged; the weekly preset exists so
+# a run covering several tickers can still show a correctly-seeded long-term average, because a
+# daily 200-period line needs ~500 bars PER TICKER and a weekly 40-period line needs ~190. Weekly is
+# also the chart O'Neil read bases on, and 10/40 weeks are the canonical weekly lines (40 weeks ~=
+# 200 sessions), so this is a change of lens rather than a loss of rigour.
+INTERVALS = {
+    "daily":  {"window": 300, "periods": (50, 200), "vol_window": 50, "stale_after": 4,
+               "unit": "sessions", "ma_unit": "",       "pull_hint": "interval=\"1D\" count=500"},
+    "weekly": {"window": 150, "periods": (10, 40),  "vol_window": 10, "stale_after": 10,
+               "unit": "weeks",    "ma_unit": "-week", "pull_hint": "interval=\"1W\" count=200"},
+}
 
 
 # --------------------------------------------------------------------------- loading
@@ -179,7 +200,12 @@ def bar_age_days(last_date):
         return None
 
 
-def build(rows, window, ma_type, periods, markers, label, stale_after=4):
+def build(rows, window, ma_type, periods, markers, label, stale_after=4, interval="daily",
+          vol_window=None):
+    spec = INTERVALS.get(interval, INTERVALS["daily"])
+    unit, ma_unit = spec["unit"], spec["ma_unit"]
+    if vol_window is None:
+        vol_window = spec["vol_window"]
     closes = [r[4] for r in rows]
     fn = sma if ma_type == "sma" else ema
     fast, slow = periods
@@ -190,28 +216,32 @@ def build(rows, window, ma_type, periods, markers, label, stale_after=4):
     win = rows[start:]
 
     out = {
-        "windowLabel": label or "last %d sessions" % len(win),
+        "windowLabel": label or "last %d %s" % (len(win), unit),
         "bars": [[r[0], _px(r[1], dp), _px(r[2], dp), _px(r[3], dp), _px(r[4], dp), int(r[5])] for r in win],
         "ema50": [_px(x, dp) for x in ma_fast[start:]],
         "ema200": [_px(x, dp) for x in ma_slow[start:]],
-        "avgVol": avg_volume([r[5] for r in rows], 50),
+        "avgVol": avg_volume([r[5] for r in rows], vol_window),
+        "avgVolLabel": "%d%s average" % (vol_window, ma_unit or "-day"),
         "markers": markers,
     }
-    if ma_type == "sma":
-        out["emaLabels"] = ["%d SMA" % fast, "%d SMA" % slow]
-    elif (fast, slow) != (50, 200):
-        out["emaLabels"] = ["%d EMA" % fast, "%d EMA" % slow]
+    kind = "SMA" if ma_type == "sma" else "EMA"
+    if ma_type == "sma" or (fast, slow) != (50, 200):
+        out["emaLabels"] = ["%d%s %s" % (fast, ma_unit, kind), "%d%s %s" % (slow, ma_unit, kind)]
 
     warnings = []
     history = start  # bars available before the first visible candle
     if len(rows) < slow:
-        warnings.append("only %d daily bars supplied - the %d-period average never seeds and will "
-                        "not be drawn; pull at least %d." % (len(rows), slow, slow + window))
+        warnings.append("only %d %s bars supplied - the %d-period average never seeds and will "
+                        "not be drawn; pull at least %d (%s)."
+                        % (len(rows), interval, slow, slow + window, spec["pull_hint"]))
     elif history < slow:
-        warnings.append("only %d bars precede the %d-session display window, so the %d-period average "
+        warnings.append("only %d bars precede the %d-%s display window, so the %d-period average "
                         "starts partway across the chart; pull ~%d bars for a line that spans it "
-                        "(period=TWO_YEARS gives ~500, FIVE_YEARS more)."
-                        % (history, len(win), slow, slow + window))
+                        "(%s). On a run covering several tickers, --interval weekly needs far "
+                        "fewer "
+                        "bars per name for a line that spans the chart."
+                        % (history, len(win), unit.rstrip("s"), slow, slow + window,
+                           spec["pull_hint"]))
     if len(win) < window:
         warnings.append("input has %d bars; the window was trimmed to that." % len(win))
 
@@ -244,27 +274,41 @@ def parse_marker(s):
 
 def main():
     ap = argparse.ArgumentParser(description="Build the dashboard's priceChart block from daily OHLCV bars.")
-    ap.add_argument("input", nargs="?", help="JSON file of daily bars (default: stdin)")
-    ap.add_argument("--window", type=int, default=DEFAULT_WINDOW,
-                    help="sessions to display (default %d ~= 14 months)" % DEFAULT_WINDOW)
-    ap.add_argument("--months", type=int, help="display window in months (overrides --window)")
+    ap.add_argument("input", nargs="?", help="JSON file of OHLCV bars (default: stdin)")
+    ap.add_argument("--interval", choices=tuple(INTERVALS), default="daily",
+                    help="bar interval of the INPUT, which sets the window, MA periods, volume "
+                         "average and staleness rule together (default daily: 300 sessions, "
+                         "50/200. "
+                         "weekly: 150 weeks, 10/40 - use it when one run charts several tickers)")
+    ap.add_argument("--window", type=int,
+                    help="bars to display (default 300 daily / 150 weekly)")
+    ap.add_argument("--months", type=int,
+                    help="display window in months (daily only; overrides --window)")
     ap.add_argument("--type", choices=("ema", "sma"), default="ema", help="moving-average type (default ema)")
-    ap.add_argument("--periods", default="50,200", help="fast,slow MA periods (default 50,200)")
+    ap.add_argument("--periods", help="fast,slow MA periods (default 50,200 daily / 10,40 weekly)")
+    ap.add_argument("--vol-window", type=int,
+                    help="bars in the volume-pane average (default 50 daily / 10 weekly)")
     ap.add_argument("--marker", action="append", type=parse_marker, default=[],
                     metavar="PRICE[:LABEL[:TONE]]", help="horizontal line, e.g. 178:Pivot:accent (repeatable)")
-    ap.add_argument("--stale-after", type=int, default=4, metavar="DAYS",
-                    help="warn when the newest bar is older than this many calendar days (default 4)")
-    ap.add_argument("--label", help='window label shown in the report (default "last N sessions")')
+    ap.add_argument("--stale-after", type=int, metavar="DAYS",
+                    help="warn when the newest bar is older than this many calendar days "
+                         "(default 4 daily / 10 weekly - a weekly bar is routinely days old)")
+    ap.add_argument("--label", help='window label (default "last N sessions" / "last N weeks")')
     ap.add_argument("--js", action="store_true", help='emit "priceChart: {...}," ready to paste into CONFIG')
     ap.add_argument("--out", help="write to this file instead of stdout")
     args = ap.parse_args()
 
+    spec = INTERVALS[args.interval]
     try:
-        periods = tuple(int(p) for p in args.periods.split(","))
+        periods = (tuple(int(p) for p in args.periods.split(",")) if args.periods
+                   else spec["periods"])
         if len(periods) != 2 or periods[0] < 1 or periods[1] < 1:
             raise ValueError
     except ValueError:
         raise SystemExit("chart_data: --periods wants two positive integers, e.g. 50,200")
+    if args.months and args.interval != "daily":
+        raise SystemExit("chart_data: --months counts trading sessions, so it only applies to "
+                         "--interval daily; use --window to set a weekly window in weeks.")
 
     if args.input:
         with open(args.input, "r", encoding="utf-8") as f:
@@ -272,13 +316,16 @@ def main():
     else:
         data = json.load(sys.stdin)
 
-    window = args.months * MONTH_SESSIONS if args.months else args.window
+    window = (args.months * MONTH_SESSIONS if args.months
+              else (args.window if args.window else spec["window"]))
     # No --label and no --months: let build() name the window from the bars it actually emitted,
     # so a trimmed window never claims more history than the chart shows.
     label = args.label or ("last %d months" % args.months if args.months else None)
     rows = load_rows(data)
     chart, warnings = build(rows, max(5, window), args.type, periods, args.marker, label,
-                            stale_after=args.stale_after)
+                            stale_after=(args.stale_after if args.stale_after is not None
+                                         else spec["stale_after"]),
+                            interval=args.interval, vol_window=args.vol_window)
 
     text = json.dumps(chart, indent=2)
     if args.js:

@@ -205,9 +205,14 @@ Per `data-and-scoring-guide.md`. With TradingView that is five calls:
 the floor either way — 6 months covers breakout volume and RS, but the report's chart displays
 300 sessions and needs ~200 more before that window to seed the 200-day EMA.
 
+**Size the pull to how many tickers the run covers** — decide before the first `get_ohlcv`.
+1-2 tickers: daily `count=500`, weekly `count=104`. **3+: weekly `count=200`, daily `count=260`**
+(the chart goes weekly, so the daily series only has to cover RS's 252-session lookback).
+
 Run `scripts/relative_strength.py` on the ticker's bars + SPY's bars for the RS proxy, % off
-52-week high, base depth/length, and breakout volume, and `scripts/chart_data.py` on the same
-daily bars for the report's candlestick chart. **Both scripts read the provider payload as it
+52-week high, base depth/length, and breakout volume, and `scripts/chart_data.py` for the report's
+candlestick chart. **RS is always computed from DAILY bars** whatever the chart shows — its
+lookbacks are 63/126/252 sessions — so a weekly chart never changes a graded number. **Both scripts read the provider payload as it
 came back** — TradingView `{t,o,h,l,c,v}` dicts or IBKR/Polygon shapes — so never retype bars.
 Then gather what TradingView does not carry: **institutional sponsorship (I)** from 13F/Form 4 or
 the web, and the "new" story for N. For a deeper financial picture you may fold in the
@@ -292,8 +297,13 @@ has no buy point, and the honest entry is **"None now" plus the condition that w
    avg $ volume, next earnings — **reference only, not a CAN SLIM input**; leave empty to
    hide), the `buyPlan` (pivot, 7-8% stop, profit-taking, sell signals to watch),
    disclaimer and sources.
-1b. **Build the daily chart** — candlesticks + 50/200-day EMA + volume for the **last 300
-   sessions (~14 months)**, the window that makes a 200-day EMA meaningful. Never hand-transcribe
+1b. **Build the chart — daily for 1-2 tickers, weekly once a run covers 3 or more.** A daily
+   200-day line needs ~500 bars *per ticker* and fails silently when it doesn't get them (the chart
+   renders with its long-term average starting partway across). So 3+ names go weekly, all of them:
+   `python scripts/chart_data.py {weekly-bars}.json --interval weekly --js` (150 weeks, 10/40-week,
+   ~200 bars each). **One interval for the whole run.** Full rule and rationale in the data guide.
+   The daily chart is candles + 50/200-day EMA + volume for the **last 300 sessions (~14 months)**,
+   the window that makes a 200-day EMA meaningful. Never hand-transcribe
    bars; pipe the daily OHLCV you already pulled through the script:
    `python scripts/chart_data.py {bars}.json --window 300 --marker {pivot}:Pivot:accent --js`
    (it reads TradingView `get_ohlcv` responses, IBKR `get_price_history` responses,

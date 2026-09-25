@@ -2,24 +2,24 @@
   "sister": "https://github.com/thewongdirection/can-slim-recommend",
   "note": "sha256 of the files shared verbatim with can-slim-recommend. Update ONLY in the same commit that ports the change to the sister repo.",
   "files": {
-    "references/canslim-methodology.md": "43fea5390799018c4d2706b771279efdd6db024f11bc9e44b35dbc0e70e75377",
+    "references/canslim-methodology.md": "681c5c7678d2fde9c9860cb5be5a01364528261f3f0e08e3f9917057abaef101",
     "scripts/relative_strength.py": "dc9138f940302437c840b6ffc0ad24a283b07ba4550bb40b2629e046b8c25e74"
   },
   "pending_port": [
     {
-      "commit": "e5a4425",
-      "summary": "Grades must follow their evidence; strict pivot definition",
-      "why": "Both the pass/partial/fail discipline and the pivot rule (sound base AND new-high ground; no pivot >~10% below the 52-week high) are scoring rules the screener applies too."
-    },
-    {
-      "commit": "f0c1c55",
-      "summary": "50-day average volume excludes the latest bar",
-      "why": "Only the chart_data side changed here, but the screener must use the same volume basis as relative_strength.breakout_volume wherever it reports a volume surge."
-    },
-    {
       "commit": "1d21fe8",
-      "summary": "TradingView calls are paced under a discovered rate limit (scripts/tv_throttle.py)",
-      "why": "The screener sweeps sector by sector, so it spends far more TradingView calls than a single-ticker grade and hits the limit first. It needs the same discipline: the 100/min hard bound, the per-endpoint backoff (scanner and chart are limited separately), and checking every response for a refusal instead of assuming a documented limit that TradingView does not publish."
+      "summary": "Per-endpoint adaptive TradingView throttle (scripts/tv_throttle.py)",
+      "why": "The sister has its OWN 378-line tv_throttle.py with a --wait design, not this one. It lacks the 100/min hard bound, the per-endpoint (scanner vs chart) lanes, the learned ceiling_rpm and the AIMD recovery. Its observed signal ('Rate limit exceeded. Retry after 32s') IS already handled by this repo's detect_limit, so the port is additive rather than a rewrite."
+    },
+    {
+      "commit": "(this commit)",
+      "summary": "Weekly chart fallback once a run covers 3+ tickers (chart_data.py --interval)",
+      "why": "Material to the screener above all: it sweeps sector by sector, so EVERY run covers many tickers and hits the bars-per-ticker wall this fixes. A daily 200-period line needs ~500 bars per name; a weekly 40-period line ~190. Without it a multi-name run silently ships charts whose long-term average starts partway across."
+    },
+    {
+      "commit": "(outstanding in the sister)",
+      "summary": "relative_strength.py: ret_over tolerance, and dict-bar input",
+      "why": "Drift the OTHER way - this repo has it, the sister does not. ret_over here clamps to the oldest bar when the series is within 90% of the window (IBKR's ONE_YEAR returns ~251 bars for a 252-session lookback); the sister returns None, so the same data yields a 12-month RS here and a blank there. That is a computed number differing between the skills. as_row/normalize (accepting TradingView {t,o,h,l,c,v} dicts) is input-format only, not maths."
     }
   ]
 }
