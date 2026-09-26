@@ -26,7 +26,8 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MANIFEST = os.path.join(ROOT, "parity-manifest.json")
 SISTER = "https://github.com/thewongdirection/can-slim-recommend"
-SHARED = ["references/canslim-methodology.md", "scripts/relative_strength.py"]
+SHARED = ["references/canslim-methodology.md", "scripts/relative_strength.py",
+          "scripts/rubric.py"]   # rubric.py is shared VERBATIM - the sister imports it
 
 
 def sha256(path):
@@ -73,11 +74,17 @@ def main():
 
     if args.update or args.clear_pending:
         m = manifest()
-        out = {"sister": SISTER,
-               "note": "sha256 of the files shared verbatim with can-slim-recommend. Update ONLY in "
-                       "the same commit that ports the change to the sister repo.",
-               "files": now if args.update else m.get("files", now),
-               "pending_port": [] if args.clear_pending else owed}
+        # Start from what is already there and change only the two fields this command owns.
+        # Rebuilding from a fixed key set silently dropped every other field - the verbatim/
+        # substance classes, the ported log, what the sister owes back - and overwrote a
+        # customised note with the stock one, so a routine --update threw away the context that
+        # makes the manifest worth reading.
+        out = dict(m)
+        out.setdefault("sister", SISTER)
+        out.setdefault("note", "sha256 of the files shared with can-slim-recommend. Update ONLY "
+                               "in the same commit that ports the change to the sister repo.")
+        out["files"] = now if args.update else m.get("files", now)
+        out["pending_port"] = [] if args.clear_pending else owed
         with open(MANIFEST, "w", encoding="utf-8") as f:
             json.dump(out, f, indent=2)
             f.write("\n")

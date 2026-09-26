@@ -403,3 +403,21 @@ point-in-time read that changes as data and the market change.
   symbol/name only. Timestamp everything; flag approximations (RS is a proxy; web data may lag).
 - Decision support, not advice. No order placement, no personalized buy/sell directives — grade
   the stock against the model and let the user decide.
+
+### Shared files: the two classes
+`parity-manifest.json` groups the files shared with `can-slim-recommend` into two classes, and
+conflating them caused a real regression.
+
+**`verbatim`** (`scripts/rubric.py`) carries no local additions on either side, so a byte
+difference IS drift. The sister's `sector_screen.py` imports it rather than restating its numbers —
+restating them is how "10% below the 52-week high" came to mean N<=partial in one skill and N=fail
+in the other.
+
+**`substance`** (`references/canslim-methodology.md`, `scripts/relative_strength.py`) is not
+byte-identical and is not meant to be: each side adds its own material (the sister has a "Modern
+refinements" methodology section and `--asof` point-in-time truncation). Demanding equal bytes there
+does not detect drift, it manufactures it — the only way to go green is to delete the other side's
+work, which is what sister commit `6e281fb` did to both of its additions. Port the CHANGE, not the
+file. The sister's `scripts/check_parity.py` checks these by behaviour instead: every canonical rung
+paragraph must appear verbatim in its copy, and both `relative_strength` copies are run over shared
+series and must return identical numbers.

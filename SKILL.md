@@ -338,15 +338,16 @@ verdict with the defensive rule (cut losses 7-8%).
 ## Changing this skill? Keep `can-slim-recommend` at parity
 
 `can-slim-recommend` is not a separate implementation — it is the same methodology aimed at a
-different question. Two files are shared **verbatim** between the repos, and the rules in the rest
-of this document are meant to hold on both sides:
+different question. Three files are shared, in **two classes**, and the distinction matters:
 
-| Shared file | Why it must match |
-|---|---|
-| `references/canslim-methodology.md` | the rule set both skills grade against |
-| `scripts/relative_strength.py` | the RS proxy, % off high, base metrics, breakout volume |
+| Shared file | Class | Why it must match |
+|---|---|---|
+| `scripts/rubric.py` | **verbatim** | the thresholds as code — a byte difference IS drift |
+| `references/canslim-methodology.md` | substance | the rule set both skills grade against |
+| `scripts/relative_strength.py` | substance | the RS proxy, % off high, base metrics, breakout volume |
 
-**These two are no longer byte-identical, and that is expected — port the CHANGE, not the file.**
+**`verbatim` must match byte for byte; `substance` must not — port the CHANGE, not the file.**
+See "Shared files: the two classes" in `references/data-and-scoring-guide.md`.
 As of 2026-08 the sister carries screener-only additions on top of the shared substance: a
 "Modern refinements & professional practice" section in the methodology, and a point-in-time
 `--asof` truncation mode in `relative_strength.py` (for historical screens). Copying either file

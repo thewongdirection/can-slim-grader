@@ -1,30 +1,60 @@
 {
   "sister": "https://github.com/thewongdirection/can-slim-recommend",
-  "note": "sha256 of the files shared verbatim with can-slim-recommend. Update ONLY in the same commit that ports the change to the sister repo.",
+  "note": "sha256 of the files shared with can-slim-recommend. TWO CLASSES, and conflating them caused a real regression: 'verbatim' files carry no local extensions, so a byte difference IS drift; 'substance' files legitimately differ, because each side adds its own material, and demanding equal bytes there does not detect drift but manufactures it - the only way to go green is to delete the other side's work, which is exactly what happened (sister commit 6e281fb wholesale-copied both substance files and destroyed its own 'Modern refinements' section and its --asof truncation). Substance is checked by behaviour instead: the sister's scripts/check_parity.py requires every canonical rung paragraph to appear verbatim in its copy and runs BOTH relative_strength implementations over shared series demanding identical numbers. Update hashes ONLY in the same commit that ports the change.",
   "files": {
     "references/canslim-methodology.md": "80d39e626310537151819ec7e1e13b998ab3b3e46c6717ee0d56ae1bccab6bcd",
-    "scripts/relative_strength.py": "dc9138f940302437c840b6ffc0ad24a283b07ba4550bb40b2629e046b8c25e74"
+    "scripts/relative_strength.py": "dc9138f940302437c840b6ffc0ad24a283b07ba4550bb40b2629e046b8c25e74",
+    "scripts/rubric.py": "fe3b8756599644b60934f12e3cf685fa099681a84b0b11dabe1b74a7cd68f059"
   },
-  "pending_port": [
+  "classes": {
+    "verbatim": [
+      "scripts/rubric.py"
+    ],
+    "substance": [
+      "references/canslim-methodology.md",
+      "scripts/relative_strength.py"
+    ]
+  },
+  "pending_port": [],
+  "ported": [
     {
       "commit": "1d21fe8",
-      "summary": "Per-endpoint adaptive TradingView throttle (scripts/tv_throttle.py)",
-      "why": "The sister has its own 378-line --wait throttle, not this one. It lacks the 100/min hard bound, the per-endpoint lanes, the learned ceiling and the AIMD recovery. Its observed signal ('Rate limit exceeded. Retry after 32s') is already handled here."
+      "summary": "Per-endpoint adaptive TradingView throttle",
+      "status": "DONE in the sister, independently. Its scripts/tv_throttle.py now carries the hard bound (max_rate 90, 'deliberately under 100/min'), per-endpoint lanes (SCOPES = scanner/ohlcv/other) and AIMD recovery (raise_after/raise_by). It keeps its own --wait design, which BLOCKS the caller rather than advising it."
     },
     {
       "commit": "0f4c73c",
       "summary": "Weekly chart fallback once a run covers 3+ tickers (chart_data.py --interval)",
-      "why": "Material to the screener above all: every sweep covers many tickers and hits the bars-per-ticker wall this fixes."
+      "status": "NOT APPLICABLE to the sister as built: it has no chart_data.py and draws no per-ticker candles - its dashboard renders a leadership scatter from the screener rows it already holds. Re-open if it ever grows per-ticker charts."
     },
     {
-      "commit": "(this commit)",
+      "commit": "5198fa5",
       "summary": "scripts/rubric.py + the 100-ticker parity test, and the price/liquidity floor on S",
-      "why": "rubric.py is the shared thresholds as code; the sister should import or mirror it so the two cannot drift again. The parity test found the real gap it now guards: this repo had no price floor, so a sub-$15 name the screener DROPS was being graded here with S open. The floor now fails S, which is the same judgement placed where a single-ticker grade can express it."
+      "status": "DONE in the sister. rubric.py is byte-identical there and sector_screen.py now IMPORTS it instead of restating its numbers, with a test asserting DEFAULTS derives every shared value from it (its WEIGHT must BE rubric.WEIGHT, not a copy). The S floor text is in its methodology copy. It did not copy this test; it wrote a complementary one - see 'owed to this repo' below."
     },
     {
-      "commit": "(outstanding in the sister)",
-      "summary": "relative_strength.py ret_over tolerance and dict-bar input; prose/code splits",
-      "why": "Drift the other way. ret_over here clamps to the oldest bar within 90% of the window (IBKR's ONE_YEAR gives ~251 bars for a 252-session lookback); the sister returns None, so the same data yields a 12-month RS here and a blank there. Separately, the sister's own prose and code disagree on two points its code should win: L's pass (prose says #1-2 in group, code caps at top-half) and the >25%-above-50-day case (prose says FAIL, code raises a flag)."
+      "commit": "(was outstanding in the sister)",
+      "summary": "relative_strength.py ret_over tolerance and dict-bar input",
+      "status": "DONE in the sister, and it kept its --asof extension on top, so that file is now this repo's superset PLUS point-in-time truncation. Its analyze() normalises BEFORE truncating, because a TradingView {t,o,h,l,c,v} bar has no [0] to compare until it is a row."
+    }
+  ],
+  "owed_from_sister": [
+    {
+      "commit": "(owed to this repo, from the sister)",
+      "summary": "scripts/check_parity.py - a CROSS-REPO behavioural parity check",
+      "why": "This repo's check_parity.py hashes files in its own tree and says outright that it cannot see a reworded threshold. The sister's reads BOTH checkouts and tests behaviour in five layers: shared bytes split verbatim/substance; shared substance (canonical rungs verbatim + both relative_strength copies run over 60 shared series demanding identical numbers); the two dashboards' REAL scoring code lifted from the templates and run in node over all 3^7 = 2187 scorecards; 100 random tickers with messy authored input; and the methodology's rungs checked against what the code implements. It compiles modules from source text rather than importing them, because a stale __pycache__ made it report a maths divergence between two byte-identical functions - and would equally have hidden a real one."
+    },
+    {
+      "commit": "(owed to this repo, from the sister)",
+      "summary": "scripts/annual_eps.py - grade A from SEC XBRL annual EPS",
+      "why": "A asks for EPS up EACH of 3 years at >=25%, and TradingView's get_financial_history returns 8 quarters whatever period is requested - two fiscal years, one short - so A cannot be graded from the connector at all and TTM growth is a different test (AVT reads +46% TTM while its FY2025 EPS fell 49%). Five traps are documented in it, including that XBRL's `fy` is the FILING's fiscal focus so keying on it shuffles years (MU came out with its FY2023 loss labelled FY2025), and that filers change EPS tag over time so tags must be merged in preference order, not raced."
+    }
+  ],
+  "open_questions": [
+    {
+      "commit": "(owed BOTH ways)",
+      "summary": "Two places where this repo's prose and code disagree, and the code should win",
+      "why": "L's pass: the prose says #1-2 in a strong group, both repos' code caps at top-half. The >25%-above-the-50-day case: the prose says FAIL, the code raises a flag. The sister's ceiling matches this repo's CODE in both, so the two skills agree today and only the shared PROSE is out of step - which is the drift that silently changes a grade, so it should be fixed in the shared file in one commit on both sides. Not done here because the sister's checker requires the canonical rung paragraphs to appear verbatim in its copy: editing them needs both repos moved together."
     }
   ]
 }
