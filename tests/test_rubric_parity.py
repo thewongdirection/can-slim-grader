@@ -21,8 +21,10 @@ reports which mode it ran in.
 RUN IT ON EVERY UPGRADE. It is an ordinary unittest, so `python3 -m unittest discover -s tests`
 covers it, and that command is the repo's own pre-commit gate.
 """
+import io
 import json
 import os
+import re
 import sys
 import unittest
 
@@ -129,6 +131,54 @@ class Rubric(unittest.TestCase):
         self.assertEqual(rubric.cap_n(None)[0], "pass")
         self.assertEqual(rubric.cap_s(None)[0], "pass")
         self.assertEqual(rubric.cap_l(None)[0], "pass")
+
+
+class ProseMatchesCode(unittest.TestCase):
+    """The shared methodology is what a human grades to; rubric.py is what the screener grades to.
+
+    Two rungs disagreed, and a prose-only disagreement is the drift that is hardest to see: the
+    files are shared as SUBSTANCE, so each copy legitimately differs and a hash says nothing, and
+    both repos run the same rubric.py, so a differential test agrees too. Only the words move, and
+    a letter quietly changes for every name a person grades by hand.
+
+    Both were settled in favour of the code, so each rung is asserted in BOTH directions - the
+    prose must state the code's rule and must not restate the superseded one.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        with io.open(os.path.join(ROOT, "references", "canslim-methodology.md"),
+                     encoding="utf-8") as fh:
+            cls.md = fh.read()
+
+    def rung(self, letter):
+        m = re.search(r"\*\*%s\.\*\*(.+?)(?=\n- \*\*|\n\n)" % letter, self.md, re.S)
+        self.assertIsNotNone(m, "no %s rung found - the extractor is stale" % letter)
+        return " ".join(m.group(1).split())
+
+    def test_L_passes_on_a_top_half_rank_not_the_number_one_name(self):
+        text = self.rung("L")
+        self.assertRegex(text, r"PASS needs.{0,60}top half")
+        self.assertNotRegex(text, r"PASS needs[^.]{0,80}#1 or #2")
+        # ...and that is exactly where cap_l draws the line.
+        self.assertEqual(rubric.cap_l(20.0, 1, 20)[0], "pass")
+        self.assertEqual(rubric.cap_l(20.0, 10, 20)[0], "pass")
+        self.assertEqual(rubric.cap_l(20.0, 11, 20)[0], "partial")
+        self.assertEqual(rubric.cap_l(-1.0, 1, 20)[0], "fail")
+
+    def test_extension_above_the_50_day_is_a_flag_not_a_fail(self):
+        text = self.rung("N")
+        self.assertRegex(text, r"50-day.{0,160}flag, not a FAIL")
+        self.assertNotRegex(text, r"50-day[^.]{0,120}is a \*\*FAIL\*\*")
+        # cap_n bounds N from the 52-week-high distance ALONE; extension is reported separately.
+        self.assertTrue(rubric.extended(40.0))
+        self.assertEqual(rubric.cap_n(-1.0)[0], "pass")
+        row = {"symbol": "X:Y", "close": 100.0, "price_52_week_high": 100.0,
+               "EMA50": 60.0, "EMA200": 50.0, "relative_volume_10d_calc": 1.2,
+               "average_volume_10d_calc": 1e6, "Perf.6M": 80.0}
+        out = rubric.score_row(row, bench_perf=10.0)
+        self.assertTrue(out["extended"])
+        self.assertEqual(out["caps"]["N"], "pass")
 
 
 class SisterParity(unittest.TestCase):

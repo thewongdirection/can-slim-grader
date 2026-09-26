@@ -2,7 +2,7 @@
   "sister": "https://github.com/thewongdirection/can-slim-recommend",
   "note": "sha256 of the files shared with can-slim-recommend. TWO CLASSES, and conflating them caused a real regression: 'verbatim' files carry no local extensions, so a byte difference IS drift; 'substance' files legitimately differ, because each side adds its own material, and demanding equal bytes there does not detect drift but manufactures it - the only way to go green is to delete the other side's work, which is exactly what happened (sister commit 6e281fb wholesale-copied both substance files and destroyed its own 'Modern refinements' section and its --asof truncation). Substance is checked by behaviour instead: the sister's scripts/check_parity.py requires every canonical rung paragraph to appear verbatim in its copy and runs BOTH relative_strength implementations over shared series demanding identical numbers. Update hashes ONLY in the same commit that ports the change.",
   "files": {
-    "references/canslim-methodology.md": "80d39e626310537151819ec7e1e13b998ab3b3e46c6717ee0d56ae1bccab6bcd",
+    "references/canslim-methodology.md": "3740012e68e39e34a8aed10e33ada61047cdc79c8a5e275cf5e9e5a0247ad767",
     "scripts/relative_strength.py": "dc9138f940302437c840b6ffc0ad24a283b07ba4550bb40b2629e046b8c25e74",
     "scripts/rubric.py": "fe3b8756599644b60934f12e3cf685fa099681a84b0b11dabe1b74a7cd68f059"
   },
@@ -36,6 +36,11 @@
       "commit": "(was outstanding in the sister)",
       "summary": "relative_strength.py ret_over tolerance and dict-bar input",
       "status": "DONE in the sister, and it kept its --asof extension on top, so that file is now this repo's superset PLUS point-in-time truncation. Its analyze() normalises BEFORE truncating, because a TradingView {t,o,h,l,c,v} bar has no [0] to compare until it is a row."
+    },
+    {
+      "commit": "(resolved in both repos, one coordinated change)",
+      "summary": "Two prose/code splits in the shared methodology, settled in favour of the code",
+      "status": "DONE on both sides. L's PASS rung now reads TOP HALF of the group, which is where rubric.cap_l has always drawn it (#1-2 is kept as O'Neil's ideal, not the pass bar); the >25%-above-the-50-day case now reads as a FLAG that denies a PASS rather than a FAIL, which is what cap_n does - it bounds N from the 52-week-high distance alone and rubric.extended() reports the run-up separately. The rung paragraphs stay byte-identical between the copies. Both repos now PIN the resolution in BOTH directions - the prose must state the code's rule and must not restate the superseded one - so restoring either wording fails a test rather than quietly moving a grade: here in tests/test_rubric_parity.py::ProseMatchesCode, in the sister in tests/test_regression.py and in its check_parity.py rung layer, which also probes cap_l's rank ladder and asserts an extended row keeps its N cap and carries the run-up in `flags`, never in `drop_reasons`. Every one of those assertions was mutation-tested against both the old wording and the old behaviour."
     }
   ],
   "owed_from_sister": [
@@ -50,11 +55,5 @@
       "why": "A asks for EPS up EACH of 3 years at >=25%, and TradingView's get_financial_history returns 8 quarters whatever period is requested - two fiscal years, one short - so A cannot be graded from the connector at all and TTM growth is a different test (AVT reads +46% TTM while its FY2025 EPS fell 49%). Five traps are documented in it, including that XBRL's `fy` is the FILING's fiscal focus so keying on it shuffles years (MU came out with its FY2023 loss labelled FY2025), and that filers change EPS tag over time so tags must be merged in preference order, not raced."
     }
   ],
-  "open_questions": [
-    {
-      "commit": "(owed BOTH ways)",
-      "summary": "Two places where this repo's prose and code disagree, and the code should win",
-      "why": "L's pass: the prose says #1-2 in a strong group, both repos' code caps at top-half. The >25%-above-the-50-day case: the prose says FAIL, the code raises a flag. The sister's ceiling matches this repo's CODE in both, so the two skills agree today and only the shared PROSE is out of step - which is the drift that silently changes a grade, so it should be fixed in the shared file in one commit on both sides. Not done here because the sister's checker requires the canonical rung paragraphs to appear verbatim in its copy: editing them needs both repos moved together."
-    }
-  ]
+  "open_questions": []
 }

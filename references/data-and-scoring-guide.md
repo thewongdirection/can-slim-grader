@@ -347,16 +347,22 @@ Suggested rubric:
   high, or the top of a spike inside a downtrend does not qualify — an earnings gap that is still
   well below the 52-week high is base *repair*, and repair is a PARTIAL with no entry price.
   **More than ~20% below the 52-week high, N fails** — that is a broken chart, not repair. A PASS
-  also needs the stock no more than **~5% extended** past the pivot, and extension roughly **>25%
-  above the 50-day** after a climax run is a **FAIL**: there is no entry there.
+  also needs the stock no more than **~5% extended** past the pivot. Extension roughly **>25%
+  above the 50-day** after a climax run puts the stock past any pivot, so **N cannot PASS** — but
+  it is a **flag, not a FAIL**: N's fail rung is distance below the 52-week high, and a name
+  running away from a sound base is a PARTIAL with no entry price. `rubric.cap_n` bounds N from the
+  52-week-high distance alone and `rubric.extended()` reports the run-up separately, so say
+  "extended, no entry" and grade PARTIAL rather than failing the letter.
 - **S — Supply & demand.** PASS: breakout volume **≥40-50% above the 50-day average** (or a clear
   dry-up in the base), reasonable float, buybacks, low debt, management ownership. PARTIAL:
   institutional-grade liquidity and a constructive trend but no demand surge; mixed. FAIL: heavy
   distribution, bloated float, high debt/dilution, **or the stock below its 200-day**.
-- **L — Leader or laggard.** PASS: RS clearly beating SPY (proxy well positive) **and** the #1 or
-  #2 name in a strong group. PARTIAL: outperforming but mid-pack in its group, or leading a group
-  that itself lags. FAIL: **in line with** or behind SPY — matching the index is not leadership —
-  or near 52-week lows.
+- **L — Leader or laggard.** PASS: RS clearly beating SPY (proxy well positive) **and** ranked in
+  the **top half of its group**. PARTIAL: ranked in the bottom half, or leading a group that itself
+  lags. FAIL: **in line with** or behind SPY — matching the index is not leadership — or near
+  52-week lows. O'Neil's *buy the #1 or #2 name* is the ideal, not the pass bar: `rubric.cap_l`
+  caps at PARTIAL only once the rank passes half the group, and grading to a #1-2 bar would cost
+  half a point on most names either skill passes.
 - **I — Institutional sponsorship.** PASS: quality funds and the trend **verified as rising**,
   with room left to add. PARTIAL: adequate ownership whose trend you could not verify, flat
   sponsorship, or over-owned — **a high ownership level alone is a PARTIAL**. FAIL: little/no

@@ -300,8 +300,11 @@ decision — the C/A/L + N gate above decides the label.
 - **N.** A pivot needs a sound base *and* new-high ground. More than ~10% below the 52-week high
   there is no pivot, so N cannot pass; **more than ~20% below, N fails** — that is a broken chart,
   not a base under repair. A wide-and-loose or late-stage base fails on its own. A PASS also
-  requires the stock to be no more than **~5% extended past** the pivot, and extension far above the
-  50-day (roughly **>25%**) after a climax run is a **FAIL**, not a partial: there is no entry there.
+  requires the stock to be no more than **~5% extended past** the pivot. Extension far above the
+  50-day (roughly **>25%**) after a climax run puts the stock past any pivot, so **N cannot pass** —
+  but it is a **flag, not a FAIL**: N's fail rung is distance below the 52-week high, and a name
+  running away from a sound base is a PARTIAL with no entry price. Both skills execute it that way
+  (`rubric.extended()` is context for the grader; it never sets a letter on its own).
 - **A.** A company without three years of record — newly public, or freshly restructured — **cannot
   exceed PARTIAL on A**, however good the two years it has.
 - **S.** A stock **below its 200-day** fails S. A PASS wants breakout volume **>=40-50% above the
@@ -310,9 +313,11 @@ decision — the C/A/L + N gate above decides the label.
   so S fails whatever the volume pattern looks like. A screener DROPS such a name because it is
   choosing among thousands; a single-ticker grade cannot drop the name it was asked about, so it
   grades it with S failed and says why. Same judgement, different place to put it.
-- **L.** PASS needs clear outperformance **and** the #1 or #2 name in a strong group. Outperforming
-  but mid-pack, or leading a group that itself lags, is PARTIAL. **In line with the benchmark is a
-  FAIL** — matching the index is not leadership.
+- **L.** PASS needs clear outperformance **and** a rank in the **top half of its group**. Ranking
+  in the bottom half, or leading a group that itself lags, is PARTIAL. O'Neil's *buy the #1 or #2
+  name* is the ideal to aim at, not the pass bar: `rubric.cap_l` caps at PARTIAL only once the rank
+  passes half the group, and grading to a #1-2 bar would cost half a point on most names both
+  skills pass. **In line with the benchmark is a FAIL** — matching the index is not leadership.
 - **I.** A high ownership *level* alone is a **PARTIAL**. A PASS needs the trend verified as
   **rising**, with quality funds adding and room left to add. Funds distributing is a FAIL.
 - **M.** **4-5 or more distribution days** in a ~25-session window, narrowing leadership, or an
