@@ -27,9 +27,8 @@ Takes **one ticker** and grades it, letter by letter, against the seven CAN SLIM
 then returns a **BUY-RANGE / WATCH / AVOID** verdict with the evidence, a chart-position read
 (including a **daily candlestick chart** of the last **300 sessions (~14 months)** with the
 50/200-day EMA and volume), and — if it's actionable — the pivot buy point and the 7-8%
-loss-cutting stop. Output is a **PDF dashboard by default** — print-ready on **A4 with a 15 mm
-margin**, in a light palette — rendered from a self-contained HTML working file, and the **HTML
-itself only if the user asks** (same report in a **dark** theme, plus the chart's hover readout).
+loss-cutting stop. Output is a **PDF dashboard by default**, rendered from a self-contained HTML
+working file, and the **HTML itself only if the user asks** (step 8 has the media rules).
 **Decision support, not advice, and never an order.**
 
 ## What CAN SLIM is (the standard this skill grades against)
@@ -50,10 +49,8 @@ fundamental source-priority ladder, and the pass/partial/fail rubric per letter.
 ## Prerequisites
 - **TradingView (`Trading_View` MCP) is the preferred source for both halves of the grade** — it
   is the only connector here that covers the price/volume letters *and* the earnings letters:
-  `get_ohlcv` (daily + weekly bars, feeds both scripts unedited), `get_financial_history`
-  (per-quarter and per-year revenue/EPS **with YoY**), `get_earnings_history` (street actual vs
-  consensus, beat rate, next report date, post-earnings price reaction), `get_financials` (ROE,
-  margins, debt/equity, market cap), `get_symbol_data` (52-week high/low, float, average volume).
+  `get_ohlcv`, `get_financial_history`, `get_earnings_history`, `get_financials` and
+  `get_symbol_data` — step 5 says which call answers what.
   Symbols are `EXCHANGE:TICKER`. Tools are deferred — load with `ToolSearch` first.
   **Every TradingView call goes through `scripts/tv_throttle.py`** — TradingView publishes no
   rate limit and refuses rather than warns, so the ceiling is discovered, not looked up. See
@@ -62,13 +59,20 @@ fundamental source-priority ladder, and the pass/partial/fail rubric per letter.
   + the stock's group), then **Massive** (Polygon-style `/v2/aggs`, **max 5 calls/min**). Both feed
   `scripts/relative_strength.py` unedited.
 - **Top of the ladder, in order: SEC filings, TradingView, IBKR** — the three that have proved
-  reliable. Filings are authoritative for **C**/**A**/**I**, TradingView for bars and street
+  reliable. Filings are authoritative for **C**/**A**, TradingView for bars and street
   consensus, IBKR as the independent check on price. Table in the data guide.
+- **`securities-filings-lookup` is part of this skill's data sourcing, not an optional extra** —
+  it is how the filings at the top of that ladder are reached, and the **primary source for
+  C/A**. Install it alongside this skill (repo link under "Sister & companion skills"); if it is
+  missing, say so and grade C/A off TradingView, flagged as vendor-derived.
 - **Alternates for fundamentals**: Daloopa / bigdata.com / LSEG / Massive / **FMP** (often
-  plan-gated — `statements` and `quote` returned ACCESS DENIED in an August-2026 check) / SEC
-  EDGAR through `securities-filings-lookup`, else **web search**. See the ladder in the data guide.
-- **Institutional sponsorship (I) is the one letter TradingView cannot answer** — take it from
-  13F/Form 4 (FMP `form13F`, `securities-filings-lookup`) or the web, and say which.
+  plan-gated — `statements` and `quote` returned ACCESS DENIED in an August-2026 check), else
+  **web search**. See the ladder in the data guide.
+- **Institutional sponsorship (I) is the one letter TradingView cannot answer** — and not one
+  `securities-filings-lookup` can answer either: it is keyed on the ticker's **own** CIK, so for
+  a company that files 13Fs it returns what that company *owns*, not who owns it. Aggregate
+  across filers instead — FMP `form13F` if entitled, else the web — and say which. Detail in the
+  data guide.
 - If no market-data connector is available, source price/technicals from the web too and say
   so — don't block.
 
@@ -106,9 +110,8 @@ from the branch archive in a plain unpacked install — and prints a final `STAT
   the same rule as step 1's carried-over data, applied to the rules themselves.
 - **Don't hand-edit an installed copy.** In a plain unpacked install `--apply` replaces every file
   that differs from upstream and retires the ones upstream dropped. Keep changes in a git clone,
-  where the script refuses to touch a dirty or diverged tree. It touches **no user data** and writes
-  nothing outside this skill's directory, except a read-only install, where it stages the newer copy
-  in a temp directory and names the path.
+  where the script refuses to touch a dirty or diverged tree. It touches **no user data** and
+  writes nothing outside this skill's directory (or, read-only, the staged copy named above).
 
 ### 1 — Pull fresh every run; if you can't, say so in the report and date what you used
 **A grade is only as good as the moment it was measured — and the report has to say when that
@@ -170,10 +173,10 @@ holds the run under it — never more than **100 requests/minute**. **Full rules
    `observe --tool {tool_name} -`. **`observe` is the "always check" half**, re-deriving the ceiling
    from what the connector actually did. Exit 3 means use the source ladder; exit 4, split the batch.
 
-**Back off per endpoint, not per connector** — `get_symbol_data` and `get_quote` were refused in one
-observed check while `get_ohlcv` answered in the same second. **On a refusal never fabricate the
-figure**: wait out the cooldown, retry once, then drop down the ladder and record the row in
-`CONFIG.dataStatus.items` as `carried`/`unavailable` with a `why` naming the rate limit.
+**Back off per endpoint, not per connector** — `get_symbol_data` and `get_quote` were refused in
+one observed check while `get_ohlcv` answered in the same second. **On a refusal never fabricate
+the figure**: wait out the cooldown, retry once, then drop down the ladder and record the row as
+`carried`/`unavailable` with a `why` naming the rate limit.
 
 ### 3 — Resolve the ticker
 TradingView: `search_symbols` → the `EXCHANGE:TICKER` id (e.g. `NASDAQ:WDC`); `get_financials`
@@ -293,22 +296,21 @@ has no buy point, and the honest entry is **"None now" plus the condition that w
    disclaimer and sources.
 1b. **Build the chart — daily for 1-2 tickers, weekly once a run covers 3 or more.** A daily
    200-day line needs ~500 bars *per ticker* and fails silently when it doesn't get them (the chart
-   renders with its long-term average starting partway across). So 3+ names go weekly, all of them:
+   renders with its long-term average starting partway across). So 3+ names go weekly, all of
+   them, one interval for the whole run:
    `python scripts/chart_data.py {weekly-bars}.json --interval weekly --js` (150 weeks, 10/40-week,
-   ~200 bars each). **One interval for the whole run.** Full rule and rationale in the data guide.
+   ~200 bars each). Full rule and rationale in the data guide.
    The daily chart is candles + 50/200-day EMA + volume for the **last 300 sessions (~14 months)**,
    the window that makes a 200-day EMA meaningful. Never hand-transcribe
    bars; pipe the daily OHLCV you already pulled through the script:
    `python scripts/chart_data.py {bars}.json --window 300 --marker {pivot}:Pivot:accent --js`
-   (it reads TradingView `get_ohlcv` responses, IBKR `get_price_history` responses,
-   `[t,o,h,l,c,v]` rows, or Polygon/Massive `/v2/aggs` results) and paste its output as
+   and paste its output as
    `CONFIG.priceChart`. **Feed it ≥500 daily bars** (`get_ohlcv count=500`, or IBKR
-   `period=TWO_YEARS, step=ONE_DAY`) — the 200-day EMA needs
-   ~200 sessions *before* the first visible candle, on top of the 300 displayed, and the script
+   `period=TWO_YEARS, step=ONE_DAY`): the 200-day EMA needs
+   ~200 sessions *before* the first visible candle on top of the 300 displayed, and the script
    warns and annotates the chart when the history is too thin. Add `--marker` lines for the pivot
    and the 7-8% stop so the chart shows the same prices as the entry/stop band. If price data is
-   unavailable, leave `bars` empty — the chart section hides itself — and say the chart was
-   omitted for lack of data.
+   unavailable, leave `bars` empty — the chart section hides itself — and say so.
 2. **Render the PDF — this is the default deliverable.** The filled `{TICKER}-canslim.html` is the
    working file (self-contained; **dark on screen, light on paper** — the template's `@media print`
    block swaps the palette and sets **A4 with a 15 mm margin**, so you never choose); the user gets
@@ -401,11 +403,14 @@ substance, adapt the framing.
   ideas) built on the same methodology and RS script. Use it when the user wants ideas/a list
   rather than a verdict on one named stock; use this grader for the reverse.
 - **`ibkr-review-ticker`** — a data-rich single-stock dashboard (fundamentals vs peers,
-  valuation, options, price outlook). Fold its data into the evaluation when useful.
-- **`securities-filings-lookup`** — the official filing PDFs (10-K/10-Q/20-F) behind C/A and
-  13F/Form 4 for I.
-- **If a companion skill you want isn't installed**, tell the user and point them to its repo,
-  then continue with the source ladder:
+  valuation, options). Fold its data in when useful.
+- **`securities-filings-lookup`** — **part of this skill's data sourcing, not an optional
+  extra.** It resolves the ticker to its CIK and returns the company's own 10-K/10-Q/20-F from
+  the regulator, which makes it the **primary source for C/A**: a contested EPS or sales figure
+  is settled against the filing rather than a vendor's derived field. Anyone installing this
+  grader should install it too. It **cannot** grade I — see the data guide for why.
+- **If a companion skill you want isn't installed**, don't silently fall back — tell the user it
+  is missing, point them at its repo, then continue with the source ladder:
   - `can-slim-recommend` -> https://github.com/thewongdirection/can-slim-recommend
   - `ibkr-review-ticker` -> https://github.com/thewongdirection/ibkr-review-ticker
   - `securities-filings-lookup` -> https://github.com/thewongdirection/securities-filings-lookup
@@ -443,46 +448,42 @@ substance, adapt the framing.
   guarantee — always pair the read with the 7-8% loss-cutting rule.
 
 ## Files in this skill
+Every script here is pure standard library - no third-party packages.
+
 - `references/canslim-methodology.md` — the full CAN SLIM rules, thresholds, base patterns,
   sell rules, money management, and mistake list. (Shared with `can-slim-recommend`.)
 - `references/data-and-scoring-guide.md` — the single-ticker data-gathering sequence, the
   fundamental source ladder, and the pass/partial/fail scoring rubric + verdict definitions.
 - `scripts/relative_strength.py` — computes the RS proxy, % off 52-week high, base
-  depth/length, and breakout volume from the ticker's OHLCV bars vs SPY. Accepts TradingView
-  `{t,o,h,l,c,v}` dicts and `[t,o,h,l,c,v]` rows interchangeably. Pure standard library.
+  depth/length, and breakout volume from the ticker's OHLCV bars vs SPY.
   (Shared with `can-slim-recommend`.)
 - `scripts/chart_data.py` — builds the report's `priceChart` block (daily candles + 50/200-day
-  EMA/SMA + 50-day average volume) from daily OHLCV bars. Accepts TradingView, IBKR, row-array
-  or Polygon/Massive shapes; computes the averages over the full history and emits
-  only the display window (default 300 sessions, so feed it ~500 bars). Pure standard library.
+  EMA/SMA + 50-day average volume) from daily OHLCV bars, averaging over the full history and
+  emitting only the display window.
 - `scripts/tv_throttle.py` — paces TradingView calls under a **discovered** rate limit: a
-  per-endpoint sliding-window budget hard-bounded at 100 req/min (spending 80% of whatever limit
-  is believed), which halves and cools down the refused endpoint on a `rate_limited` response and
-  creeps back up after it stays clean. Learned ceilings persist between runs in a state file
-  (`$TV_THROTTLE_STATE`, else `$XDG_STATE_HOME/can-slim/tv_throttle.json`). Pure standard library.
+  per-endpoint sliding-window budget hard-bounded at 100 req/min, spending 80% of whatever limit
+  is believed. Learned ceilings persist between runs in a state file
+  (`$TV_THROTTLE_STATE`, else `$XDG_STATE_HOME/can-slim/tv_throttle.json`).
 - `scripts/self_update.py` — the step-0 pre-flight: compares this install against
   `github.com/thewongdirection/can-slim-grader@main` and installs a newer version in place —
   fast-forward in a git clone (never over a dirty or diverged tree), file-by-file from the branch
   archive in an unpacked install, recording the commit in `.skill-version` so the next check is a
-  single API call. Reports `current` / `updated` / `update-available` / `blocked` / `unknown` and
-  never blocks a run. Pure standard library.
+  single API call.
 - `scripts/check_skill.py` — checks `SKILL.md` is importable: frontmatter shape, the name
-  grammar, the 1024-character description cap, no angle-bracket text a Markdown or HTML renderer
-  would eat as a tag, no CRLF/tab/BOM, and that every `references/` or `scripts/` path named here
-  actually exists. Run it before committing a change to this file. Pure standard library.
+  grammar, the 1024-character description cap, no markup a renderer would eat as a tag, no
+  CRLF/tab/BOM, and that every path named here exists. Run it before committing a change to this file.
 - `scripts/check_parity.py` + `parity-manifest.json` — hashes the files shared verbatim with
-  `can-slim-recommend` and reports drift since the last recorded sync. Run before committing any
-  change to this skill; byte-level only, so material rule changes still need porting by hand.
+  `can-slim-recommend` and reports drift since the last recorded sync. Byte-level only, so a
+  material rule change still needs porting by hand - see the parity section.
 - `scripts/html_to_pdf.py` — renders the filled HTML into the **PDF that is the default
   deliverable**, A4 with a 15 mm margin. Multi-engine (headless Chrome/Chromium/Edge with
   header/footer suppressed → Playwright → WeasyPrint → wkhtmltopdf); Chrome and WeasyPrint take
   the page box from the template's `@page` rule, the other two are passed A4/15 mm explicitly.
-  Prints the engine used. Pure standard library (uses
-  whatever browser/lib is present).
+  Prints the engine used; it needs whichever browser or library is present, nothing installed.
 - `tests/` — regression tests for `scripts/tv_throttle.py`, `scripts/self_update.py` and
   `scripts/check_skill.py` (budgets and backoff, the archive/git update paths and their
-  refusals, every rule the skill checker enforces). Offline, standard library, no pytest. Run
-  with `python3 -m unittest discover -s tests`.
+  refusals, every rule the skill checker enforces), plus the 100-ticker rubric parity test and
+  the doc-policy pins. Offline, no pytest. Run with `python3 -m unittest discover -s tests`.
 - `assets/evaluation_template.html` — the report itself: a self-contained single-stock CAN SLIM
   dashboard driven by a `CONFIG` object (verdict badge, the seven-letter scorecard with evidence,
   the daily candlestick chart, technicals, and the buy/sell plan). **One file, two media:
@@ -490,6 +491,6 @@ substance, adapt the framing.
   and sets the page box, so the HTML deliverable is dark and the PDF is print-friendly without
   editing anything. **It audits itself on render** and banners any grade that contradicts its own evidence, a pivot that isn't in
   new-high ground, a score that doesn't add up, or a stop that isn't 7-8%. The chart is
-  hand-rolled inline SVG — no chart library, no network calls — with candle/EMA colours that
-  switch with the palette. Pure-ASCII source; print CSS is `@page{size:A4; margin:15mm}` with
-  `print-color-adjust:exact` so badges and chips survive the export.
+  hand-rolled inline SVG — no chart library, no network calls. Pure-ASCII source; print CSS is
+  `@page{size:A4; margin:15mm}` with `print-color-adjust:exact` so badges and chips survive the
+  export.

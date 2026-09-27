@@ -76,7 +76,8 @@ IBKR/Massive for bars and over FMP for financials. Symbols are `EXCHANGE:TICKER`
    year-ago TTM still contained the divested Sandisk business. Never grade C or A off the TTM
    growth fields; use the per-period `yoy_pct` from `get_financial_history`.
 3. **TradingView has no institutional-ownership data.** **I** still comes from 13F/Form 4 via the
-   ladder below (FMP `form13F`, `securities-filings-lookup`, or the web).
+   ladder below — an *aggregation across filers* (FMP `form13F` if entitled, else web
+   aggregators). **Not `securities-filings-lookup`**: see the trap under the ladder.
 4. **The newest bar is live while the session is open** — `get_ohlcv` returns a partial candle whose
    close and volume are not final. Label the grade intraday and provisional (step 1).
 
@@ -205,7 +206,7 @@ need* — filings are authoritative for fundamentals, the market feeds for price
 |---|---|---|---|
 | **C, A** — quarterly & annual EPS/sales, ROE | **SEC filings** (10-K/10-Q via `securities-filings-lookup` / EDGAR XBRL) | **TradingView** `get_financial_history` + `get_earnings_history` | the fallbacks below |
 | **N, S, L, M** — bars, 52-week stats, volume | **TradingView** `get_ohlcv` / `get_symbol_data` | **IBKR** `get_price_history` / `get_price_snapshot` | the fallbacks below |
-| **I** — institutional sponsorship | **SEC** 13F / Form 4 | web aggregators, stated as such | — |
+| **I** — institutional sponsorship | **SEC** 13F / Form 4, **aggregated across filers** (FMP `form13F` if entitled) | web aggregators, stated as such | — |
 
 **Why filings first for C and A.** They are the numbers the company is legally accountable for, and
 they do not carry a vendor's derivation quirks — the two traps documented above (a GAAP/street EPS
@@ -218,7 +219,36 @@ daily bars have been observed fresher than the IBKR connector's in the same sess
 here are 15-minute delayed. IBKR is the better second opinion precisely because it is independent:
 when the two disagree about the newest bar, say which one the report used.
 
-Then, in order, the fallbacks:
+### `securities-filings-lookup` is part of this skill's data sourcing
+
+**It is how the filings at the top of that table are actually reached, so treat it as part of the
+kit rather than an optional extra — anyone installing this grader should install it too:**
+https://github.com/thewongdirection/securities-filings-lookup. It resolves the ticker to its CIK
+and returns that company's own **10-K / 10-Q / 20-F** straight from the regulator, which makes it
+the **primary source for C and A**: a contested EPS or sales figure gets settled against the
+filing rather than against a vendor's derived field — and the two TradingView traps above (the
+GAAP/street EPS gap, and TTM fields that break across a spin-off) are both vendor artefacts a
+filing does not have. Its own entry point is
+`python scripts/fetch_us_filings.py NVDA --forms 10-Q,10-K --limit 3` (that skill's script, not
+one of ours), which returns real filing URLs with their periods; it needs `www.sec.gov` and
+`data.sec.gov` reachable. **Both checks in this section were run in `can-slim-recommend` (Sept
+2026) and are recorded here from its docs, not re-run in this repo** — it has no clone of the
+filings skill to run them against.
+
+Reach for it whenever TradingView's financials look thin, a restatement has broken TTM growth, or
+a number is worth arguing about. **If it is not installed, say so** — don't silently fall back —
+then grade C/A off TradingView and flag those figures as vendor-derived.
+
+**It cannot grade I, and the reason produces a *wrong* answer rather than an empty one.** It is
+keyed on the ticker's **own** CIK, and plenty of operating companies are themselves 13F filers:
+NVDA's CIK carries eleven 13F-HRs, whose information tables list Coherent, CoreWeave, Intel,
+Nebius, Nokia and Synopsys. That is what NVIDIA **owns**, not who owns NVIDIA. Point this skill
+at I and you get a company's portfolio dressed as its shareholder base, which reads perfectly
+plausibly in a report and is completely wrong. Sponsorship runs the other way and is an
+aggregation across every filer in the quarter — so take **I** from FMP `form13F` (if entitled) or
+a web aggregator, and say which.
+
+Then, in order, the fallbacks below the top three:
 
 1. **TradingView** (`Trading_View` MCP) — also the only source here that supplies the bars.
    `get_financial_history` (fq + fy) for **C**/**A**, `get_earnings_history`
@@ -260,8 +290,9 @@ Then, in order, the fallbacks:
    If the quarterly call is blocked, don't stall — source the latest quarter's C from the web
    or the 10-Q via **`securities-filings-lookup`**, and keep FMP for the annual A/ROE data.
    Requires the user's FMP API key / connector; if absent, skip to the next source.
-7. **SEC EDGAR** via the **`securities-filings-lookup`** skill — authoritative 10-K/10-Q/20-F
-   for ground-truth statements, and 13F/Form 4 for **I** (also non-US listings).
+7. **SEC EDGAR** directly (`data.sec.gov` submissions + the filing itself) — the public route to
+   the same ground truth when `securities-filings-lookup` is not installed. That skill is not a
+   fallback and is not ranked here: it sits at the **top** of the table above, for **C**/**A**.
 8. **General web search** — only when none of the above are connected. Favor primary/recent
    sources; obey copyright (paraphrase; short quotes only).
 
