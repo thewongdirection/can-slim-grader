@@ -37,6 +37,18 @@ I_SOURCING = re.compile(r"13F|Form 4|sponsorship|institutional ownership|grade \
 NEGATION = re.compile(r"\bnot\b|\bcannot\b|\bcan't\b|\bnever\b|\binstead\b|\bwrong\b", re.I)
 NEAR = 48  # characters either side of the mention
 
+# The check above keys on the skill's NAME, which a pronoun walks straight past: porting this
+# module to can-slim-recommend turned up that "Also use IT for I" passed there, and it passed
+# here too. Inside the section that IS the filings skill, an imperative "use ... for I" is wrong
+# however the skill is referred to, so that section gets its own rule.
+# The shape matters. "use it FOR I" points AT the skill and is wrong; "take I FROM FMP form13F"
+# points AWAY to a named alternative and is the correct redirect this section ends on - so the
+# preposition must precede the I, not follow it.
+USE_FOR_I = re.compile(
+    r"\b(?:use|used|using|take|taken|takes|source|sourced|reach|pull|get|fetch)\b"
+    r"[^.]{0,60}?\b(?:for|at|from)\s+\*?\*?I\*?\*?(?=[\s.,:;)]|$)", re.I)
+BEFORE = 34  # characters before the match that must carry the negation
+
 
 def read(rel):
     with io.open(os.path.join(ROOT, rel), encoding="utf-8") as fh:
@@ -111,6 +123,17 @@ class FilingsLookupIsNeverOfferedAsAnISource(unittest.TestCase):
                         window, NEGATION,
                         "%s names %s as a source in an I-sourcing sentence: %r"
                         % (rel, NAME, s))
+
+    def test_the_section_about_it_never_tells_anyone_to_source_I_from_it(self):
+        """Pronoun-proof, and scoped to the section whose whole subject is the filings skill."""
+        guide = self.docs[GUIDE]
+        start = guide.index("### `" + NAME + "` is part of this skill's data sourcing")
+        section = guide[start:guide.index("Then, in order, the fallbacks", start)]
+        for m in USE_FOR_I.finditer(section):
+            lead = section[max(0, m.start() - BEFORE):m.start()]
+            self.assertTrue(
+                NEGATION.search(lead) or NEGATION.search(m.group(0)),
+                "the filings section tells the run to source I from it: %r" % m.group(0))
 
     def test_the_trap_is_explained_with_its_evidence(self):
         guide = self.docs[GUIDE]
