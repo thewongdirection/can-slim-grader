@@ -79,40 +79,6 @@ fundamental source-priority ladder, and the pass/partial/fail rubric per letter.
 ## Workflow
 Work in order; keep the user informed.
 
-### 0 — Self-update: run the newest published version of this skill
-**Before the market check, before a single data call — make sure the copy of this skill you are
-about to follow is the newest one published.** The rules below get revised: thresholds, the
-pass/partial/fail rubric, what counts as a pivot, the guardrails. A grade produced from a stale
-copy is wrong in a way nobody can see in the output, because the report looks exactly the same.
-One command, every run:
-
-```bash
-python scripts/self_update.py --apply
-```
-
-It compares this install against **https://github.com/thewongdirection/can-slim-grader** (branch
-`main`), installs a newer version when there is one — a fast-forward in a git clone, file-by-file
-from the branch archive in a plain unpacked install — and prints a final `STATUS:` line. Act on it:
-
-| `STATUS:` | Means | Do this |
-|---|---|---|
-| `current` | this copy is the published one | go to step 1 |
-| `updated` | a newer version was just installed | **re-read `SKILL.md` and both files in `references/` from disk before continuing** — what is in your context is the copy you started with, and it is now out of date. Then run the grade from step 1 under the new rules |
-| `update-available` | newer version found, nothing installed (the `--apply` flag was missing) | re-run with `--apply` |
-| `blocked` | a newer version exists but cannot be installed here: local edits, diverged git history, a read-only install, a copy vendored inside a larger repo, or a write that failed partway | continue on this copy, and say once in the chat reply that the grade ran on an older version and why — and if the detail says the install is **part-updated**, say that too, because its files are a mix. When the output names a staged directory, read the newer `SKILL.md` and `references/` from **there** and follow those rules for this run |
-| `unknown` | the repo could not be reached (offline, rate-limited, no git) | continue on this copy and say so in the chat reply |
-
-- **Every invocation, no exceptions.** "Grade NVDA again", "re-check that" — a re-check is a full
-  re-run (step 1), and this step is part of it. It costs one small API call and short-circuits as
-  soon as the copy is confirmed current.
-- **It must never block the grade.** One attempt, a short timeout; anything other than `updated`
-  means carry on and report it. A dated grade from a slightly older copy beats no grade at all —
-  the same rule as step 1's carried-over data, applied to the rules themselves.
-- **Don't hand-edit an installed copy.** In a plain unpacked install `--apply` replaces every file
-  that differs from upstream and retires the ones upstream dropped. Keep changes in a git clone,
-  where the script refuses to touch a dirty or diverged tree. It touches **no user data** and
-  writes nothing outside this skill's directory (or, read-only, the staged copy named above).
-
 ### 1 — Pull fresh every run; if you can't, say so in the report and date what you used
 **A grade is only as good as the moment it was measured — and the report has to say when that
 was.** Two rules, and they work together:
@@ -288,7 +254,7 @@ has no buy point, and the honest entry is **"None now" plus the condition that w
    to ~5% past it), stop = 7-8% below entry (3% in a correction)**; give real prices when there
    is a valid pivot, else "None now" + the condition, the
    seven `letters` (each with score, the bar, the actual value, and a CAN-SLIM-only `read`), the
-   `priceChart` daily candlestick chart (step 1b), the
+   `priceChart` daily candlestick chart (built in item 1b of this step), the
    `chart` technicals (RS, % off high, base, pivot, breakout volume), the optional
    `essentials` reference stats (P/E, forward P/E, market cap, EPS, yield, beta, shares,
    avg $ volume, next earnings — **reference only, not a CAN SLIM input**; leave empty to
@@ -416,10 +382,6 @@ substance, adapt the framing.
   - `securities-filings-lookup` -> https://github.com/thewongdirection/securities-filings-lookup
 
 ## Guardrails
-- **Newest rules every run.** Self-update before anything else —
-  `python scripts/self_update.py --apply` — and when it reports `updated`, re-read `SKILL.md` and
-  `references/` before grading; when it cannot update, say in the chat reply that the grade ran on
-  an older copy. Never skip it on a repeat run. See step 0.
 - **Fresh data every run — no cached grades.** Re-pull price, volume and fundamentals on every
   invocation and rebuild the report from them; never reuse a prior run's figures or output file,
   and never answer a follow-up from the previous verdict. See step 1.
@@ -464,11 +426,6 @@ Every script here is pure standard library - no third-party packages.
   per-endpoint sliding-window budget hard-bounded at 100 req/min, spending 80% of whatever limit
   is believed. Learned ceilings persist between runs in a state file
   (`$TV_THROTTLE_STATE`, else `$XDG_STATE_HOME/can-slim/tv_throttle.json`).
-- `scripts/self_update.py` — the step-0 pre-flight: compares this install against
-  `github.com/thewongdirection/can-slim-grader@main` and installs a newer version in place —
-  fast-forward in a git clone (never over a dirty or diverged tree), file-by-file from the branch
-  archive in an unpacked install, recording the commit in `.skill-version` so the next check is a
-  single API call.
 - `scripts/check_skill.py` — checks `SKILL.md` is importable: frontmatter shape, the name
   grammar, the 1024-character description cap, no markup a renderer would eat as a tag, no
   CRLF/tab/BOM, and that every path named here exists. Run it before committing a change to this file.
@@ -480,10 +437,11 @@ Every script here is pure standard library - no third-party packages.
   header/footer suppressed → Playwright → WeasyPrint → wkhtmltopdf); Chrome and WeasyPrint take
   the page box from the template's `@page` rule, the other two are passed A4/15 mm explicitly.
   Prints the engine used; it needs whichever browser or library is present, nothing installed.
-- `tests/` — regression tests for `scripts/tv_throttle.py`, `scripts/self_update.py` and
-  `scripts/check_skill.py` (budgets and backoff, the archive/git update paths and their
-  refusals, every rule the skill checker enforces), plus the 100-ticker rubric parity test and
-  the doc-policy pins. Offline, no pytest. Run with `python3 -m unittest discover -s tests`.
+- `tests/` — regression tests for `scripts/tv_throttle.py`, `scripts/check_skill.py` and
+  `scripts/export_portable.py` (budgets and backoff, every rule the skill checker enforces, the
+  portable bundle's file lists), plus the 100-ticker rubric parity test and the doc-policy pins
+  (data sourcing, workflow numbering). Offline, no pytest. Run with
+  `python3 -m unittest discover -s tests`.
 - `assets/evaluation_template.html` — the report itself: a self-contained single-stock CAN SLIM
   dashboard driven by a `CONFIG` object (verdict badge, the seven-letter scorecard with evidence,
   the daily candlestick chart, technicals, and the buy/sell plan). **One file, two media:

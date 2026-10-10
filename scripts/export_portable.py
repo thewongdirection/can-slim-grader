@@ -42,8 +42,8 @@ INCLUDE = [
 # Repo housekeeping, plus scripts/rubric.py: it encodes the same thresholds the bundled
 # methodology already states in prose, and exists to be diffed against the sister skill - which a
 # host running this bundle has no copy of.
-OMITTED = ["scripts/check_skill.py", "scripts/check_parity.py", "scripts/self_update.py",
-           "scripts/rubric.py", "parity-manifest.json", "README.md", "tests/"]
+OMITTED = ["scripts/check_skill.py", "scripts/check_parity.py", "scripts/rubric.py",
+           "parity-manifest.json", "README.md", "tests/"]
 
 PREAMBLE = '''# can-slim-grader - portable bundle
 
@@ -96,10 +96,6 @@ acquires a typo.
 - **File paths** (`scripts/...`, `assets/...`, `references/...`) - the sections of this file.
 - **The parity section at the end of SKILL.md** - housekeeping for keeping two sibling repos in
   sync. Irrelevant here; skip it.
-- **Step 0, "Self-update"** - the skill refreshes itself from its git repo before every run, which
-  needs `scripts/self_update.py` and a checkout. Neither exists here, so the equivalent is to
-  re-export this bundle from <https://github.com/thewongdirection/can-slim-grader> before you rely
-  on it, and to say which date's copy produced a grade. Then start at step 1.
 
 ### 3. The parts that are NOT optional
 
@@ -133,8 +129,14 @@ def sha(text):
     return hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
 
 
+def read_text(path):
+    with open(path, "r", encoding="utf-8") as f:
+        return f.read()
+
+
 def build(root):
     stamp = _dt.date.today().isoformat()
+    sources = {rel: read_text(os.path.join(root, rel)) for rel, _ in INCLUDE}
     out = [PREAMBLE, "---\n"]
     out.append("## Contents of this bundle\n")
     for rel, why in INCLUDE:
@@ -144,8 +146,7 @@ def build(root):
     out.append("---\n")
 
     for rel, why in INCLUDE:
-        path = os.path.join(root, rel)
-        body = open(path, "r", encoding="utf-8").read()
+        body = sources[rel]
         lang = {".md": "markdown", ".py": "python", ".html": "html"}.get(os.path.splitext(rel)[1], "")
         out.append("# FILE: `%s`\n" % rel)
         out.append("> %s\n" % why)
@@ -154,8 +155,7 @@ def build(root):
         out.append("````\n")
         out.append("---\n")
 
-    files_line = ", ".join("%s (%s)" % (rel, sha(open(os.path.join(root, rel), encoding="utf-8").read()))
-                           for rel, _ in INCLUDE)
+    files_line = ", ".join("%s (%s)" % (rel, sha(sources[rel])) for rel, _ in INCLUDE)
     out.append("_Bundled %s from https://github.com/thewongdirection/can-slim-grader - "
                "regenerate with `python scripts/export_portable.py` after any change._\n\n"
                "_Source digests: %s_\n" % (stamp, files_line))
