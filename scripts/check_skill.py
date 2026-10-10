@@ -28,11 +28,9 @@ KNOWN_KEYS = {"name", "description", "license", "allowed-tools", "metadata", "ve
 MAX_NAME = 64
 MAX_DESCRIPTION = 1024
 # Guidance, not a hard cap: past this a skill is better off pushing detail into references/.
-# Raised from 5000 once this skill carried two procedural pre-flights (the self-update check and
-# the TradingView throttle) on top of the eight-step grading workflow. 5000 was calibrated when
-# there was one: with both, even stripping a whole feature's prose only reaches ~4970, so the old
-# figure failed `--strict` on a clean checkout - a gate README tells contributors to run. The
-# detail these two added lives in references/; what is left here is the procedure itself.
+# Raised from 5000 when the skill carried two procedural pre-flights (the TradingView throttle and
+# a second one, since removed) on top of the eight-step grading workflow. The body is back under
+# 5000 words, but this is a soft cap and lowering it is a separate call.
 SOFT_MAX_WORDS = 5500
 SOFT_MAX_LINES = 500
 

@@ -20,10 +20,7 @@ dashboard, use `ibkr-review-ticker`.
 
 ## What it does
 
-Every run starts by updating the skill itself — it checks this repo for a newer version and
-installs it before grading anything, so a verdict is never produced by yesterday's thresholds
-(`scripts/self_update.py`; if the repo is unreachable the run continues and says which copy it
-used). Then it pulls its own data — prices, volume and fundamentals are re-fetched on each invocation
+Every run pulls its own data — prices, volume and fundamentals are re-fetched on each invocation
 and the report is rebuilt from them, so asking again tomorrow (or ten minutes later) re-measures
 rather than repeating. When a source is down or gated the run doesn't stop: it falls down the
 source ladder, and if nothing answers it reuses the most recent earlier figure — **flagged as
@@ -85,17 +82,6 @@ allowed; an undated or silently stale one is not. For the ticker you name it:
   `get_ohlcv` answered in the same second). A refusal halves that endpoint's ceiling and cools it
   down; a clean stretch creeps it back up; the learned ceiling persists between runs. Standard
   library only.
-- `scripts/self_update.py` — the pre-flight the skill runs *before every grade*: it compares the
-  installed copy against this repo's `main` and installs a newer one in place — a fast-forward in
-  a git clone (never over uncommitted or diverged work), file-by-file from the branch archive in a
-  plain unpacked install (retiring the files upstream has dropped), and never at all when the
-  skill is vendored inside a larger repo — there it says where the update belongs instead of
-  rewriting somebody's version-controlled files. So a grade is always produced by the current
-  thresholds and rules, not
-  whichever copy happened to be installed. It reports `current` / `updated` / `update-available` /
-  `blocked` / `unknown` and never blocks a run: if the repo is unreachable the grade still happens
-  and says it ran on an older copy. Standard library only; run it yourself with
-  `python scripts/self_update.py` to see where you stand.
 - `scripts/check_skill.py` — checks `SKILL.md` still imports as a skill: frontmatter shape, the
   name grammar, the **1024-character** description cap, no angle-bracket text a Markdown or HTML
   renderer would swallow as a tag, no CRLF/tab/BOM, and that every file it points at exists. Run
@@ -121,10 +107,10 @@ allowed; an undated or silently stale one is not. For the ticker you name it:
   `can-slim-recommend`'s own `sector_screen.py` and requires the two to match. Standard library only.
 - `tests/` — regression tests for `scripts/tv_throttle.py` (the rate-limit budget and its
   bound, per-endpoint backoff, refusal detection, recovery, state handling), for
-  `scripts/self_update.py` (archive handling, the file-by-file update and its retirements,
-  the git fast-forward and its refusals, vendored installs, staging safety, the
-  status/exit-code contract) and for `scripts/check_skill.py` (every rule it enforces, plus
-  this repo's own `SKILL.md`). Offline — no network. Standard library, no pytest. Run with
+  `scripts/check_skill.py` (every rule it enforces, plus this repo's own `SKILL.md`), for
+  `scripts/export_portable.py` (the bundle's file lists match what is in the repo), and for the
+  docs themselves (the workflow's step numbering and cross-references, the data-sourcing policy).
+  Offline — no network. Standard library, no pytest. Run with
   `python3 -m unittest discover -s tests`.
 - `assets/evaluation_template.html` — the report: a self-contained single-stock CAN SLIM dashboard
   driven by a `CONFIG` object. **One file, two media** — dark on screen (the HTML deliverable),
@@ -142,6 +128,11 @@ allowed; an undated or silently stale one is not. For the ticker you name it:
 - A PDF engine for the default output — headless **Chrome/Chromium/Edge** (preferred), or
   `pip install playwright weasyprint`, or `wkhtmltopdf`. Without one the skill falls back to
   handing you the HTML and says so. A modern browser to view the HTML version if you ask for it.
+
+## Updating
+The skill's scripts make no network calls and never replace the skill's own files. New versions
+reach you through whatever installed it — a plugin marketplace, or `git pull` in a clone — so
+update it there.
 
 ## Disclaimer
 Informational decision support, **not investment advice.** It never places orders and never
